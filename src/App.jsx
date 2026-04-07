@@ -1,17 +1,35 @@
-import { useEffect, useState } from 'react'
-import WebApp from '@twa-dev/sdk'
+import { useEffect, useState } from "react"
 
 function App() {
   const [user, setUser] = useState(null)
 
   useEffect(() => {
-    WebApp.ready()
-    setUser(WebApp.initDataUnsafe?.user)
+    const tg = window.Telegram?.WebApp
+
+    if (tg) {
+      tg.ready()
+      tg.expand()
+
+      const tgUser = tg.initDataUnsafe?.user
+      console.log("TG USER:", tgUser)
+
+      if (tgUser) {
+        setUser(tgUser)
+      }
+    }
   }, [])
 
+  if (!user) {
+    return <div>Загрузка...</div>
+  }
+
   return (
-    <div>
-      <h1>Привет, {user?.first_name ?? 'гость'}!</h1>
+    <div style={{ padding: 20 }}>
+      <h1>Math Tutor 🚀</h1>
+
+      <p>Привет, {user.first_name}</p>
+
+      <MainPage user={user} />
     </div>
   )
 }
