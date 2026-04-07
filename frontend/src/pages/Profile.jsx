@@ -1,27 +1,30 @@
 import { useEffect, useState } from "react"
 
+const API = "https://math-tutor-webapp.onrender.com"
+
 export default function Profile({ user, goBack }) {
   const [profile, setProfile] = useState(null)
 
   useEffect(() => {
-    fetch(`https://math-tutor-webapp.onrender.com/user/${user.id}`)
+    fetch(`${API}/user/${user.id}`)
       .then(res => res.json())
       .then(data => setProfile(data.user))
   }, [user.id])
 
-  if (!profile) return <div>Загрузка профиля...</div>
+  if (!profile) return <div className="app">Загрузка...</div>
 
   return (
-    <div style={{ padding: 20 }}>
-      <button onClick={goBack}>⬅️ Назад</button>
+    <div className="app">
+      <button className="back" onClick={goBack}>←</button>
 
       <h2>👤 Профиль</h2>
 
-      <div style={{ marginTop: 20 }}>
-        <p><b>ID:</b> {profile.user_id}</p>
-        <p><b>Username:</b> {profile.username}</p>
-        <p><b>XP:</b> {profile.xp}</p>
-        <p><b>Подписка:</b> {profile.subscription ? "Да" : "Нет"}</p>
+      <div className="profile">
+        <p>📝 {profile.first_name} {profile.last_name}</p>
+        <p>🏛 {profile.institute}</p>
+        <p>📚 {profile.group_number}</p>
+        <p>🔑 {profile.knrtu_login}</p>
+        <p>📅 {profile.registered_at}</p>
       </div>
     </div>
   )
