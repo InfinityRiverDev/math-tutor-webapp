@@ -12,7 +12,7 @@ function App() {
       tg.expand()
       setUser(tg.initDataUnsafe.user)
     } else {
-      // 🔥 fallback для разработки
+      // fallback
       setUser({
         id: 123,
         first_name: "TestUser",
@@ -21,9 +21,23 @@ function App() {
     }
   }, [])
 
-  if (!user) {
-    return <div>Загрузка...</div>
-  }
+  // 🔥 регистрация пользователя
+  useEffect(() => {
+    if (!user) return
+
+    fetch("https://your-backend.onrender.com/user/register", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        user_id: user.id,
+        username: user.username || ""
+      })
+    })
+  }, [user])
+
+  if (!user) return <div>Загрузка...</div>
 
   return (
     <div style={{ padding: 20 }}>
