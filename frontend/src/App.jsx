@@ -4,6 +4,8 @@ import MainPage from "./pages/MainPage"
 function App() {
   const [user, setUser] = useState(null)
 
+  
+
   useEffect(() => {
     const tg = window.Telegram?.WebApp
 
@@ -12,6 +14,7 @@ function App() {
       tg.expand()
       setUser(tg.initDataUnsafe.user)
     } else {
+      console.log("⚠️ FALLBACK USER")
       // fallback
       setUser({
         id: 123,
