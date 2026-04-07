@@ -113,3 +113,21 @@ async def update_history(user_id: int, history: list):
         {"user_id": user_id},
         {"$set": {"tutor_history": history}}
     )
+
+async def add_message(user_id, role, content):
+    await users.update_one(
+        {"user_id": user_id},
+        {
+            "$push": {
+                "history": {
+                    "role": role,
+                    "content": content
+                }
+            }
+        }
+    )
+
+
+async def get_history(user_id):
+    user = await users.find_one({"user_id": user_id})
+    return user.get("history", []) if user else []
