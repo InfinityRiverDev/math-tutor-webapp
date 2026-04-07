@@ -20,4 +20,12 @@ async def register(req: UserRequest):
 @router.get("/{user_id}")
 async def get_user(user_id: int):
     user = await get_user_profile(user_id)
+
+    if not user:
+        await register_user(user_id, "")
+        user = await get_user_profile(user_id)
+
+    # 🔥 фикс ObjectId
+    user["_id"] = str(user["_id"])
+
     return {"user": user}
