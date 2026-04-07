@@ -4,7 +4,7 @@ export default function Profile({ user, goBack }) {
   const [profile, setProfile] = useState(null)
 
   useEffect(() => {
-    fetch(`https://your-backend.onrender.com/user/${user.id}`)
+    fetch(`https://math-tutor-webapp.onrender.com/user/${user.id}`)
       .then(res => res.json())
       .then(data => setProfile(data.user))
   }, [user.id])
