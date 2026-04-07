@@ -8,6 +8,10 @@ function App() {
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
+    console.log('-------------')
+    console.log("tg:", tg)
+    console.log("initDataUnsafe:", tg?.initDataUnsafe)
+    console.log("initData:", tg?.initData)
 
     if (tg && tg.initDataUnsafe?.user) {
       tg.ready()
