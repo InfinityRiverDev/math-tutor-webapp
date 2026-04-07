@@ -25,7 +25,7 @@ function App() {
   useEffect(() => {
     if (!user) return
 
-    fetch("https://your-backend.onrender.com/user/register", {
+    fetch("https://math-tutor-webapp.onrender.com/user/register", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
