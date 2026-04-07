@@ -5,7 +5,7 @@ export default function Calculator({ goBack }) {
   const [result, setResult] = useState("")
 
   const solve = async () => {
-    const res = await fetch("http://localhost:8000/calculator/", {
+    const res = await fetch("https://math-tutor-webapp.onrender.com/calculator/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"

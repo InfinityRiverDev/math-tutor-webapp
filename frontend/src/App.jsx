@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import MainPage from "./pages/MainPage"
 
 function App() {
   const [user, setUser] = useState(null)
@@ -6,16 +7,17 @@ function App() {
   useEffect(() => {
     const tg = window.Telegram?.WebApp
 
-    if (tg) {
+    if (tg && tg.initDataUnsafe?.user) {
       tg.ready()
       tg.expand()
-
-      const tgUser = tg.initDataUnsafe?.user
-      console.log("TG USER:", tgUser)
-
-      if (tgUser) {
-        setUser(tgUser)
-      }
+      setUser(tg.initDataUnsafe.user)
+    } else {
+      // 🔥 fallback для разработки
+      setUser({
+        id: 123,
+        first_name: "TestUser",
+        username: "test"
+      })
     }
   }, [])
 
@@ -26,7 +28,6 @@ function App() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Math Tutor 🚀</h1>
-
       <p>Привет, {user.first_name}</p>
 
       <MainPage user={user} />
