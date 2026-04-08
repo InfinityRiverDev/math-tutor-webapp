@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import MainPage from "./pages/MainPage"
+import "./App.css"
 
 function App() {
   const [user, setUser] = useState(null)
@@ -47,10 +48,7 @@ function App() {
   if (!user) return <div>Загрузка...</div>
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Math Tutor 🚀</h1>
-      <p>Привет, {user.first_name}</p>
-
+    <div>
       <MainPage user={user} />
     </div>
   )

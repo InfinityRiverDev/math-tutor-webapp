@@ -11,7 +11,7 @@ export default function UserPage({ user }) {
   return (
     <div className="app">
       <h1 className="title">Math Tutor 🚀</h1>
-
+      <p style={{ textAlign: 'center', opacity: 0.8 }}>Рад видеть, {user.first_name} 👋</p>
       <div className="grid">
         <div className="card" onClick={() => setPage("tutor")}>
           🎓 ИИ-репетитор
