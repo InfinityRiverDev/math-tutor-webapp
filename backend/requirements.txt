@@ -4,3 +4,4 @@ motor
 python-dotenv
 aiohttp
 yandex-ai-studio-sdk
+python-multipart
