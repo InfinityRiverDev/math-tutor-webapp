@@ -1,28 +1,20 @@
 """
-routes/billing.py
-FastAPI роуты для кошелька, тарифов, промокодов и подписок.
-
-Добавить в main.py:
-    from routes import billing, admin_billing
-    app.include_router(billing.router)
-    app.include_router(admin_billing.router)
+routes/billing.py  —  /billing/*
 """
-
-import os
-import uuid
-import aiohttp
+import os, uuid, aiohttp
 from datetime import datetime
-
 from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Optional
 
 from database.billing_models import (
-    get_balance, get_wallet,
-    top_up_balance, deduct_balance,
+    get_balance, top_up_balance, deduct_balance,
     get_all_plans, get_plan,
     get_promo_by_code, use_promo,
     get_active_subscription, activate_subscription,
-    save_payment, get_payment_by_id, update_payment_status
+    save_payment, get_payment_by_id, update_payment_status,
+    save_chat_message, get_chat_messages,
+    get_all_chats_for_manager, mark_messages_read
 )
 
 router = APIRouter(prefix="/billing")
@@ -30,156 +22,184 @@ router = APIRouter(prefix="/billing")
 YOOKASSA_SHOP_ID = os.getenv("YOOKASSA_SHOP_ID", "")
 YOOKASSA_SECRET  = os.getenv("YOOKASSA_SECRET_KEY", "")
 BOT_BASE_URL     = os.getenv("BOT_BASE_URL", "https://t.me/YourBot")
+BOT_TOKEN        = os.getenv("TOKEN") or os.getenv("BOT_TOKEN", "")
 
 
-# ── Статус подписки + баланс ─────────────────────────────────────
+# ── Статус ────────────────────────────────────────────────────────
 
 @router.get("/status")
 async def billing_status(user_id: int):
     balance = await get_balance(user_id)
     sub = await get_active_subscription(user_id)
-
     if sub:
         expires = datetime.fromisoformat(sub["expires_at"])
         days_left = max(0, (expires - datetime.now()).days)
-        return {
-            "active": True,
-            "plan_name": sub.get("plan_name"),
-            "expires_at": sub["expires_at"],
-            "days_left": days_left,
-            "balance": balance,
-        }
+        return {"active": True, "plan_name": sub.get("plan_name"),
+                "expires_at": sub["expires_at"], "days_left": days_left, "balance": balance}
     return {"active": False, "balance": balance}
 
 
-# ── Список тарифов ───────────────────────────────────────────────
+# ── Тарифы ────────────────────────────────────────────────────────
 
 @router.get("/plans")
 async def get_plans():
-    plans = await get_all_plans()
-    return {"plans": plans}
+    return {"plans": await get_all_plans()}
 
 
-# ── Пополнение: создание платежа ────────────────────────────────
+# ── Пополнение ────────────────────────────────────────────────────
 
-class TopupRequest(BaseModel):
+class TopupReq(BaseModel):
     user_id: int
     amount: float
 
 @router.post("/topup")
-async def create_topup(req: TopupRequest):
+async def create_topup(req: TopupReq):
     if req.amount < 10:
         return {"error": "Минимум 10₽"}
-
     payment_id = str(uuid.uuid4())
-    payment_url = await _create_yookassa_payment(req.amount, payment_id, f"Пополнение кошелька user {req.user_id}")
-
-    if not payment_url:
-        return {"error": "Не удалось создать платёж"}
-
+    url = await _create_yookassa_payment(req.amount, payment_id, f"Пополнение кошелька user {req.user_id}")
+    if not url:
+        return {"error": "Не удалось создать платёж ЮKassa. Проверьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в .env"}
     await save_payment(req.user_id, payment_id, req.amount, "pending")
-    return {"payment_url": payment_url, "payment_id": payment_id}
+    return {"payment_url": url, "payment_id": payment_id}
 
 
-# ── Проверка промокода ───────────────────────────────────────────
+# ── Промокод ──────────────────────────────────────────────────────
 
-class PromoCheckRequest(BaseModel):
+class PromoReq(BaseModel):
     code: str
 
 @router.post("/promo/check")
-async def check_promo(req: PromoCheckRequest):
+async def check_promo(req: PromoReq):
     promo = await get_promo_by_code(req.code)
     if not promo:
         return {"valid": False}
     return {"valid": True, "discount_percent": promo["discount_percent"], "code": promo["code"]}
 
 
-# ── Покупка тарифа ───────────────────────────────────────────────
+# ── Покупка тарифа ────────────────────────────────────────────────
 
-class SubscribeRequest(BaseModel):
+class SubscribeReq(BaseModel):
     user_id: int
     plan_id: str
-    promo_code: str | None = None
+    promo_code: Optional[str] = None
 
 @router.post("/subscribe")
-async def subscribe(req: SubscribeRequest):
+async def subscribe(req: SubscribeReq):
     plan = await get_plan(req.plan_id)
     if not plan:
         return {"success": False, "error": "Тариф не найден"}
 
-    discount = 0
-    promo = None
+    discount, promo = 0, None
     if req.promo_code:
         promo = await get_promo_by_code(req.promo_code)
         if promo:
             discount = promo["discount_percent"]
 
     final_price = round(plan["price"] * (1 - discount / 100), 2)
-
     ok = await deduct_balance(req.user_id, final_price)
     if not ok:
-        balance = await get_balance(req.user_id)
-        return {"success": False, "error": f"Недостаточно средств. На балансе {balance:.2f}₽"}
+        bal = await get_balance(req.user_id)
+        return {"success": False, "error": f"Недостаточно средств. На балансе {bal:.2f}₽, нужно {final_price}₽"}
 
     if promo:
         await use_promo(promo["code"])
-
     await activate_subscription(req.user_id, req.plan_id, plan["duration_days"], plan["name"])
     sub = await get_active_subscription(req.user_id)
-
-    return {
-        "success": True,
-        "plan_name": plan["name"],
-        "expires_at": sub["expires_at"] if sub else None
-    }
+    return {"success": True, "plan_name": plan["name"], "expires_at": sub["expires_at"] if sub else None}
 
 
-# ── ЮKassa вебхук ────────────────────────────────────────────────
+# ── Вебхук ЮKassa ─────────────────────────────────────────────────
 
 @router.post("/webhook/yookassa")
-async def yookassa_webhook_fastapi(payload: dict):
-    """
-    Альтернативный вебхук через FastAPI (если не используешь aiohttp).
-    Зарегистрируй этот URL в ЮKassa: POST /billing/webhook/yookassa
-    """
-    event = payload.get("event")
+async def yookassa_webhook(payload: dict):
+    if payload.get("event") != "payment.succeeded":
+        return {"ok": True}
     obj = payload.get("object", {})
-
-    if event != "payment.succeeded":
-        return {"ok": True}
-
     amount = float(obj.get("amount", {}).get("value", 0))
-    metadata = obj.get("metadata", {})
-    our_payment_id = metadata.get("payment_id")
-
-    if not our_payment_id:
+    our_id = obj.get("metadata", {}).get("payment_id")
+    if not our_id:
         return {"ok": True}
-
-    existing = await get_payment_by_id(our_payment_id)
+    existing = await get_payment_by_id(our_id)
     if not existing or existing.get("status") == "succeeded":
-        return {"ok": True}  # идемпотентность
-
+        return {"ok": True}
     user_id = existing["user_id"]
     await top_up_balance(user_id, amount)
-    await update_payment_status(our_payment_id, "succeeded")
-
+    await update_payment_status(our_id, "succeeded")
+    # Уведомить пользователя в Telegram
+    if BOT_TOKEN:
+        try:
+            async with aiohttp.ClientSession() as s:
+                await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                             json={"chat_id": user_id,
+                                   "text": f"✅ Кошелёк пополнен на <b>{amount:.0f}₽</b>!\nТеперь можно купить тариф.",
+                                   "parse_mode": "HTML"})
+        except Exception:
+            pass
     return {"ok": True}
 
 
-# ── Внутренняя функция: создание платежа ЮKassa ─────────────────
+# ── Чат заказов ───────────────────────────────────────────────────
 
-async def _create_yookassa_payment(amount: float, payment_id: str, description: str) -> str | None:
+class SendMsgReq(BaseModel):
+    from_id: int
+    to_id: int
+    text: Optional[str] = None
+    file_id: Optional[str] = None
+    file_name: Optional[str] = None
+
+@router.post("/chat/send")
+async def chat_send(req: SendMsgReq):
+    if not req.text and not req.file_id:
+        return {"success": False, "error": "Нет текста или файла"}
+    msg_id = await save_chat_message(req.from_id, req.to_id, req.text, req.file_id, req.file_name)
+
+    # Уведомить получателя в Telegram
+    if BOT_TOKEN:
+        try:
+            notif = f"💬 Новое сообщение в заказе!\n{req.text or '[файл]'}"
+            async with aiohttp.ClientSession() as s:
+                await s.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                             json={"chat_id": req.to_id, "text": notif})
+        except Exception:
+            pass
+
+    return {"success": True, "msg_id": msg_id}
+
+@router.get("/chat/messages")
+async def chat_messages_route(user_a: int, user_b: int):
+    await mark_messages_read(from_id=user_a, to_id=user_b)
+    msgs = await get_chat_messages(user_a, user_b)
+    return {"messages": msgs}
+
+@router.get("/chat/orders")
+async def chat_orders(manager_id: int):
+    chats = await get_all_chats_for_manager(manager_id)
+    return {"chats": chats}
+
+@router.get("/chat/user-info")
+async def chat_user_info(user_id: int):
+    from database.models import get_user_profile
+    profile = await get_user_profile(user_id)
+    if not profile:
+        return {"name": f"User {user_id}", "username": ""}
+    name = f"{profile.get('first_name', '')} {profile.get('last_name', '')}".strip() or f"User {user_id}"
+    return {"name": name, "username": profile.get("username", ""), "group": profile.get("group_number", "")}
+
+
+# ── Внутренняя: создание платежа ЮKassa ───────────────────────────
+
+async def _create_yookassa_payment(amount: float, payment_id: str, description: str):
+    if not YOOKASSA_SHOP_ID or not YOOKASSA_SECRET:
+        return None
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 "https://api.yookassa.ru/v3/payments",
-                json={
-                    "amount": {"value": f"{amount:.2f}", "currency": "RUB"},
-                    "confirmation": {"type": "redirect", "return_url": BOT_BASE_URL},
-                    "capture": True,
-                    "description": description,
-                    "metadata": {"payment_id": payment_id}
-                },
+                json={"amount": {"value": f"{amount:.2f}", "currency": "RUB"},
+                      "confirmation": {"type": "redirect", "return_url": BOT_BASE_URL},
+                      "capture": True, "description": description,
+                      "metadata": {"payment_id": payment_id}},
                 auth=aiohttp.BasicAuth(YOOKASSA_SHOP_ID, YOOKASSA_SECRET),
                 headers={"Idempotence-Key": payment_id}
             ) as resp:
