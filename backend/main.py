@@ -1,23 +1,27 @@
+"""
+main.py (FastAPI backend)
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import calculator, tutor, user
+from routes import calculator, tutor, user, billing, admin_billing
 
 app = FastAPI()
 
-# 🔥 CORS (чтобы Vercel работал)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # потом можно ограничить
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# роуты
 app.include_router(calculator.router)
 app.include_router(tutor.router)
 app.include_router(user.router)
+app.include_router(billing.router)
+app.include_router(admin_billing.router)
 
 
 @app.get("/")

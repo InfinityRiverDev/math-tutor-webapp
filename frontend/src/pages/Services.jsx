@@ -1,0 +1,78 @@
+// Services.jsx
+import { useState } from "react"
+
+export default function Services({ goBack }) {
+  return (
+    <div style={s.root}>
+      <div style={s.header}>
+        <button style={s.backBtn} onClick={goBack}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <div style={s.headerInfo}>
+          <span style={s.headerTitle}>📝 Услуги</span>
+          <span style={s.headerSub}>Распечатка и заказы</span>
+        </div>
+      </div>
+      <div style={s.body}>
+        <ServiceCard
+          icon="🖨️" title="Распечатка" desc="1 страница — 10₽ · Забрать в ДАС №6"
+          color="rgba(16,185,129,0.15)"
+          action="Написать менеджеру"
+          url="https://t.me/infinityriver"
+        />
+        <ServiceCard
+          icon="🎞️" title="Презентации" desc="От 250₽ · Срок: 1 день"
+          color="rgba(99,102,241,0.15)"
+          action="Заказать"
+          url="https://t.me/mermely?text=Хочу%20заказать%20презентацию"
+        />
+      </div>
+    </div>
+  )
+}
+
+function ServiceCard({ icon, title, desc, color, action, url }) {
+  return (
+    <div style={{ ...s.card, background: color }}>
+      <div style={s.cardTop}>
+        <span style={s.cardIcon}>{icon}</span>
+        <div>
+          <div style={s.cardTitle}>{title}</div>
+          <div style={s.cardDesc}>{desc}</div>
+        </div>
+      </div>
+      <a href={url} target="_blank" rel="noreferrer" style={s.cardBtn}>{action} →</a>
+    </div>
+  )
+}
+
+const s = {
+  root: { minHeight: "100vh", background: "#0a0f1e", display: "flex", flexDirection: "column", fontFamily: "system-ui" },
+  header: {
+    display: "flex", alignItems: "center", gap: 12, padding: "20px 20px 18px",
+    background: "linear-gradient(160deg, #131929 0%, #0a0f1e 100%)",
+    borderBottom: "1px solid rgba(255,255,255,0.05)",
+  },
+  backBtn: {
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 10, color: "#f1f5f9", padding: "7px 9px", cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  },
+  headerInfo: { display: "flex", flexDirection: "column", gap: 2 },
+  headerTitle: { fontSize: 18, fontWeight: 600, color: "#f1f5f9" },
+  headerSub: { fontSize: 12, color: "rgba(255,255,255,0.35)" },
+  body: { padding: "16px", display: "flex", flexDirection: "column", gap: 12 },
+  card: { borderRadius: 18, padding: "18px", border: "1px solid rgba(255,255,255,0.07)" },
+  cardTop: { display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 14 },
+  cardIcon: { fontSize: 28, flexShrink: 0 },
+  cardTitle: { fontSize: 16, fontWeight: 700, color: "#f1f5f9" },
+  cardDesc: { fontSize: 13, color: "rgba(255,255,255,0.45)", marginTop: 3 },
+  cardBtn: {
+    display: "block", textAlign: "center",
+    background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 12, padding: "11px", color: "#f1f5f9",
+    fontSize: 14, fontWeight: 600, textDecoration: "none",
+  },
+}
