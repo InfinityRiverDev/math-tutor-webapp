@@ -5,6 +5,7 @@ import Wallet from "./Wallet"
 import Education from "./Education"
 import Services from "./Services"
 import Focus from "./Focus"
+import OrderChat from "./Orderchat"
 
 const menuItems = [
   {
@@ -67,6 +68,8 @@ export default function UserPage({ user, subscription, reloadSubscription }) {
   const [page, setPage] = useState("home")
   const [pressed, setPressed] = useState(null)
   const [lockedFlash, setLockedFlash] = useState(null)
+  // Для OrderChat: { managerId, prefill }
+  const [chatTarget, setChatTarget] = useState(null)
 
   const hasSubscription = subscription?.active === true
 
@@ -79,12 +82,26 @@ export default function UserPage({ user, subscription, reloadSubscription }) {
     setPage(item.id)
   }
 
+  // Открыть чат с менеджером (вызывается из Services)
+  const goToChat = (managerId, prefill) => {
+    setChatTarget({ managerId, prefill })
+    setPage("orderchat")
+  }
+
   if (page === "tutor")     return <Tutor user={user} goBack={() => setPage("home")} />
   if (page === "profile")   return <Profile user={user} goBack={() => setPage("home")} subscription={subscription} />
   if (page === "wallet")    return <Wallet user={user} goBack={() => setPage("home")} subscription={subscription} reloadSubscription={reloadSubscription} />
   if (page === "education") return <Education user={user} goBack={() => setPage("home")} />
-  if (page === "services")  return <Services goBack={() => setPage("home")} />
   if (page === "focus")     return <Focus goBack={() => setPage("home")} />
+  if (page === "services")  return <Services goBack={() => setPage("home")} user={user} goToChat={goToChat} />
+  if (page === "orderchat" && chatTarget) return (
+    <OrderChat
+      user={user}
+      managerId={chatTarget.managerId}
+      prefill={chatTarget.prefill}
+      goBack={() => { setPage("services"); setChatTarget(null) }}
+    />
+  )
 
   const subBannerVisible = !hasSubscription
 

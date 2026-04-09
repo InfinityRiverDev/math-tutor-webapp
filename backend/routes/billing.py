@@ -3,7 +3,7 @@ routes/billing.py  —  /billing/*
 """
 import os, uuid, aiohttp
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 
@@ -126,7 +126,6 @@ async def yookassa_webhook(payload: dict):
     user_id = existing["user_id"]
     await top_up_balance(user_id, amount)
     await update_payment_status(our_id, "succeeded")
-    # Уведомить пользователя в Telegram
     if BOT_TOKEN:
         try:
             async with aiohttp.ClientSession() as s:
@@ -139,7 +138,7 @@ async def yookassa_webhook(payload: dict):
     return {"ok": True}
 
 
-# ── Чат заказов ───────────────────────────────────────────────────
+# ── Чат заказов — отправка текста ─────────────────────────────────
 
 class SendMsgReq(BaseModel):
     from_id: int
@@ -154,7 +153,6 @@ async def chat_send(req: SendMsgReq):
         return {"success": False, "error": "Нет текста или файла"}
     msg_id = await save_chat_message(req.from_id, req.to_id, req.text, req.file_id, req.file_name)
 
-    # Уведомить получателя в Telegram
     if BOT_TOKEN:
         try:
             notif = f"💬 Новое сообщение в заказе!\n{req.text or '[файл]'}"
@@ -165,6 +163,60 @@ async def chat_send(req: SendMsgReq):
             pass
 
     return {"success": True, "msg_id": msg_id}
+
+
+# ── Чат заказов — отправка .pptx файла ───────────────────────────
+
+@router.post("/chat/send-file")
+async def chat_send_file(
+    from_id: int = Form(...),
+    to_id: int = Form(...),
+    file: UploadFile = File(...)
+):
+    if not file.filename.endswith(".pptx"):
+        return {"success": False, "error": "Только .pptx файлы"}
+
+    if not BOT_TOKEN:
+        return {"success": False, "error": "BOT_TOKEN не задан"}
+
+    # Пересылаем файл через Telegram Bot API получателю
+    file_bytes = await file.read()
+    file_id_tg = None
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Отправляем файл получателю через бота
+            form = aiohttp.FormData()
+            form.add_field("chat_id", str(to_id))
+            form.add_field("caption", f"📎 Презентация от менеджера: {file.filename}")
+            form.add_field("document", file_bytes,
+                           filename=file.filename,
+                           content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+
+            resp = await session.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
+                data=form
+            )
+            data = await resp.json()
+            if data.get("ok"):
+                file_id_tg = data["result"]["document"]["file_id"]
+    except Exception as e:
+        print("FILE SEND ERROR:", e)
+        return {"success": False, "error": "Ошибка отправки через Telegram"}
+
+    # Сохраняем в чат
+    msg_id = await save_chat_message(
+        from_id=from_id,
+        to_id=to_id,
+        text=None,
+        file_id=file_id_tg,
+        file_name=file.filename
+    )
+
+    return {"success": True, "msg_id": msg_id, "file_id": file_id_tg}
+
+
+# ── Чат заказов — получение сообщений ────────────────────────────
 
 @router.get("/chat/messages")
 async def chat_messages_route(user_a: int, user_b: int):

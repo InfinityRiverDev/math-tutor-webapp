@@ -2,11 +2,11 @@ import { useEffect, useState } from "react"
 import MainPage from "./pages/MainPage"
 import "./App.css"
 
-const API = "https://math-tutor-webapp.onrender.com"
+export const API = "https://math-tutor-webapp.onrender.com"
 
 export default function App() {
   const [user, setUser] = useState(null)
-  const [subscription, setSubscription] = useState(null) // { active, plan_name, expires_at, balance }
+  const [subscription, setSubscription] = useState(null)
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
@@ -19,7 +19,6 @@ export default function App() {
     }
   }, [])
 
-  // Регистрация
   useEffect(() => {
     if (!user) return
     fetch(`${API}/user/register`, {
@@ -29,7 +28,6 @@ export default function App() {
     })
   }, [user])
 
-  // Загрузка подписки и баланса
   useEffect(() => {
     if (!user) return
     loadSubscription()
