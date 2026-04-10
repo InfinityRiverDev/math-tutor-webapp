@@ -1,13 +1,5 @@
 """
 routes/billing.py  —  /billing/*
-
-ИСПРАВЛЕНИЯ в вебхуке:
-1. Переменные окружения читаются через функцию os.getenv() при каждом вызове,
-   а не один раз при импорте — так точно подхватывается .env
-2. Добавлен эндпоинт /billing/webhook/test для ручной проверки зачисления
-3. Добавлен /billing/debug для проверки что переменные окружения загружены
-4. Исправлен URL вебхука — в ЮKassa надо прописать именно:
-   https://ВАШ_ДОМЕН/billing/webhook/yookassa
 """
 
 import os
@@ -39,24 +31,19 @@ def get_bot_base_url(): return os.getenv("BOT_BASE_URL", "https://t.me/YourBot")
 def get_bot_token():    return os.getenv("TOKEN") or os.getenv("BOT_TOKEN", "")
 
 
-# ── Отладка (можно удалить после настройки) ───────────────────────
-
 @router.get("/debug")
 async def billing_debug():
-    """Проверить что переменные окружения загружены правильно."""
     shop_id = get_shop_id()
     secret  = get_secret()
     token   = get_bot_token()
     return {
-        "YOOKASSA_SHOP_ID":  shop_id[:4] + "***" if shop_id else "НЕ ЗАДАН ❌",
+        "YOOKASSA_SHOP_ID":    shop_id[:4] + "***" if shop_id else "НЕ ЗАДАН ❌",
         "YOOKASSA_SECRET_KEY": secret[:8] + "***" if secret else "НЕ ЗАДАН ❌",
-        "BOT_TOKEN":         token[:10] + "***" if token else "НЕ ЗАДАН ❌",
-        "BOT_BASE_URL":      get_bot_base_url(),
-        "webhook_url":       f"{get_bot_base_url()}/billing/webhook/yookassa",
+        "BOT_TOKEN":           token[:10] + "***" if token else "НЕ ЗАДАН ❌",
+        "BOT_BASE_URL":        get_bot_base_url(),
+        "webhook_url":         f"{get_bot_base_url()}/billing/webhook/yookassa",
     }
 
-
-# ── Статус подписки + баланс ──────────────────────────────────────
 
 @router.get("/status")
 async def billing_status(user_id: int):
@@ -75,14 +62,10 @@ async def billing_status(user_id: int):
     return {"active": False, "balance": balance}
 
 
-# ── Тарифы ────────────────────────────────────────────────────────
-
 @router.get("/plans")
 async def get_plans():
     return {"plans": await get_all_plans()}
 
-
-# ── Пополнение — создание платежа ЮKassa ─────────────────────────
 
 class TopupReq(BaseModel):
     user_id: int
@@ -110,8 +93,6 @@ async def create_topup(req: TopupReq):
     return {"payment_url": payment_url, "payment_id": payment_id}
 
 
-# ── Проверка промокода ────────────────────────────────────────────
-
 class PromoReq(BaseModel):
     code: str
 
@@ -122,8 +103,6 @@ async def check_promo(req: PromoReq):
         return {"valid": False}
     return {"valid": True, "discount_percent": promo["discount_percent"], "code": promo["code"]}
 
-
-# ── Покупка тарифа ────────────────────────────────────────────────
 
 class SubscribeReq(BaseModel):
     user_id:    int
@@ -158,28 +137,16 @@ async def subscribe(req: SubscribeReq):
     return {"success": True, "plan_name": plan["name"], "expires_at": sub["expires_at"] if sub else None}
 
 
-# ── Вебхук ЮKassa ─────────────────────────────────────────────────
-# URL который нужно прописать в ЮKassa:
-#   https://ВАШ_ДОМЕН/billing/webhook/yookassa
-# Событие: payment.succeeded
-
 @router.post("/webhook/yookassa")
 async def yookassa_webhook(request: Request):
-    """
-    Принимает уведомления от ЮKassa.
-    Зачисляет деньги на баланс после успешной оплаты.
-    """
     try:
         payload = await request.json()
     except Exception as e:
         logger.error(f"[WEBHOOK] Не удалось прочитать JSON: {e}")
         return {"ok": False, "error": "invalid json"}
 
-    logger.info(f"[WEBHOOK] Получено событие: {payload.get('event')}")
-
     event = payload.get("event")
     if event != "payment.succeeded":
-        # Другие события (payment.waiting, refund.succeeded и тд) — просто ОК
         return {"ok": True}
 
     obj    = payload.get("object", {})
@@ -187,30 +154,18 @@ async def yookassa_webhook(request: Request):
     meta   = obj.get("metadata", {})
     our_id = meta.get("payment_id")
 
-    logger.info(f"[WEBHOOK] payment.succeeded: amount={amount} our_id={our_id}")
-
     if not our_id:
-        logger.error("[WEBHOOK] Нет payment_id в metadata — платёж создан не нашим сервером")
         return {"ok": True}
 
-    # Идемпотентность — не зачислять дважды
     existing = await get_payment_by_id(our_id)
-    if not existing:
-        logger.error(f"[WEBHOOK] Платёж {our_id} не найден в БД")
-        return {"ok": True}
-
-    if existing.get("status") == "succeeded":
-        logger.warning(f"[WEBHOOK] Платёж {our_id} уже обработан — пропускаем")
+    if not existing or existing.get("status") == "succeeded":
         return {"ok": True}
 
     user_id = existing["user_id"]
-
-    # Зачисляем деньги
     await top_up_balance(user_id, amount)
     await update_payment_status(our_id, "succeeded")
     logger.info(f"[WEBHOOK] ✅ Зачислено {amount}₽ пользователю {user_id}")
 
-    # Уведомляем пользователя в Telegram
     token = get_bot_token()
     if token:
         try:
@@ -229,28 +184,19 @@ async def yookassa_webhook(request: Request):
     return {"ok": True}
 
 
-# ── Ручное тестирование зачисления (только для отладки!) ──────────
-
 class TestTopupReq(BaseModel):
     user_id: int
     amount:  float
-    secret:  str   # должен совпадать с YOOKASSA_SECRET_KEY для защиты
+    secret:  str
 
 @router.post("/webhook/test")
 async def manual_topup_test(req: TestTopupReq):
-    """
-    Эндпоинт для ручного тестирования зачисления без реального платежа.
-    Удалите или закройте после настройки.
-    Пример: POST /billing/webhook/test {"user_id":123,"amount":200,"secret":"ваш_секрет"}
-    """
     if req.secret != get_secret():
         return {"error": "Неверный секрет"}
     await top_up_balance(req.user_id, req.amount)
     balance = await get_balance(req.user_id)
     return {"ok": True, "new_balance": balance}
 
-
-# ── Чат заказов ───────────────────────────────────────────────────
 
 class SendMsgReq(BaseModel):
     from_id:   int
@@ -266,7 +212,6 @@ async def chat_send(req: SendMsgReq):
 
     msg_id = await save_chat_message(req.from_id, req.to_id, req.text, req.file_id, req.file_name)
 
-    # Уведомляем получателя в Telegram
     token = get_bot_token()
     if token:
         try:
@@ -305,8 +250,6 @@ async def chat_user_info(user_id: int):
     return {"name": name, "username": profile.get("username",""), "group": profile.get("group_number","")}
 
 
-# ── Создание платежа в ЮKassa ─────────────────────────────────────
-
 async def _create_yookassa_payment(amount: float, payment_id: str, description: str) -> Optional[str]:
     shop_id = get_shop_id()
     secret  = get_secret()
@@ -331,7 +274,8 @@ async def _create_yookassa_payment(amount: float, payment_id: str, description: 
             ) as resp:
                 data = await resp.json()
                 logger.info(f"[YOOKASSA] Ответ создания: status={resp.status} data={data}")
-                if resp.status != 200:
+                # ЮKassa возвращает 200 или 201 при успешном создании платежа
+                if resp.status not in (200, 201):
                     logger.error(f"[YOOKASSA] Ошибка: {data}")
                     return None
                 return data.get("confirmation", {}).get("confirmation_url")

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { API } from "../App"
 
 export default function Education({ user, goBack }) {
@@ -31,13 +31,35 @@ function Schedule({ user, goBack }) {
   const [showDateInput, setShowDateInput] = useState(false)
   const [dateInput,     setDateInput]     = useState("")
 
+  // Свайп
+  const touchStartX = useRef(null)
+  const touchStartY = useRef(null)
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    const dy = e.changedTouches[0].clientY - touchStartY.current
+    // Горизонтальный свайп должен быть больше вертикального
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+      if (dx < 0) navigate(1)   // свайп влево → следующий день
+      else        navigate(-1)  // свайп вправо → предыдущий день
+    }
+    touchStartX.current = null
+    touchStartY.current = null
+  }
+
   useEffect(() => { load(new Date()) }, [])
 
   const load = async (d) => {
     setLoading(true)
     setError(null)
     try {
-      const iso = d.toISOString().split("T")[0]  // YYYY-MM-DD
+      const iso = d.toISOString().split("T")[0]
       const r   = await fetch(`${API}/schedule?user_id=${user.id}&date=${iso}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
@@ -83,14 +105,18 @@ function Schedule({ user, goBack }) {
   }
 
   const DAYS_RU = ["Воскресенье","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота"]
-  const dayOfWeek = targetDate.getDay()                           // 0=вс..6=сб
-  const isoWeekday = dayOfWeek === 0 ? 7 : dayOfWeek            // 1=пн..7=вс
+  const dayOfWeek = targetDate.getDay()
+  const isoWeekday = dayOfWeek === 0 ? 7 : dayOfWeek
   const lessons    = days[String(isoWeekday)] ?? []
   const isToday    = new Date().toDateString() === targetDate.toDateString()
   const dateStr    = targetDate.toLocaleDateString("ru", {day:"2-digit", month:"2-digit", year:"numeric"})
 
   return (
-    <div style={s.root}>
+    <div
+      style={s.root}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <Hdr title="📆 Расписание" sub={weekNum ? `Неделя №${weekNum}` : ""} onBack={goBack} />
 
       {/* Навигация */}
@@ -114,6 +140,9 @@ function Schedule({ user, goBack }) {
           <button style={sc.dateBtn} onClick={applyDateInput}>→</button>
         </div>
       )}
+
+      {/* Подсказка свайпа */}
+      <div style={sc.swipeHint}>← свайп для смены дня →</div>
 
       <div style={{ padding:"0 16px 32px" }}>
         {loading && <div style={sc.center}><Spinner /></div>}
@@ -185,7 +214,6 @@ function Lectures({ goBack }) {
   }
 
   const openLecture = (lec) => {
-    // Открываем через Telegram WebApp если доступен, иначе обычная вкладка
     const url = `${API}/lectures/file/${lec._id}`
     if (window.Telegram?.WebApp?.openLink) {
       window.Telegram.WebApp.openLink(url)
@@ -328,6 +356,8 @@ const sc = {
              borderRadius:10, padding:"9px 12px", color:"#f1f5f9", fontSize:14, outline:"none" },
   dateBtn: { background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)",
              color:"#818cf8", borderRadius:10, padding:"9px 14px", fontSize:16, cursor:"pointer" },
+  swipeHint: { textAlign:"center", fontSize:11, color:"rgba(255,255,255,0.15)",
+               padding:"6px 16px 0", letterSpacing:"0.3px" },
   card: { display:"flex", gap:12, background:"rgba(255,255,255,0.04)",
           border:"1px solid rgba(255,255,255,0.06)", borderRadius:14, padding:"14px 16px", marginTop:10 },
   cardLeft: { display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:44 },

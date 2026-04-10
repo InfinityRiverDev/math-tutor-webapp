@@ -1,7 +1,32 @@
-// Services.jsx
 import { useState } from "react"
+import { API } from "../App"
+import OrderChat from "./OrderChat"
 
-export default function Services({ goBack }) {
+// ID менеджеров
+const PRINT_MANAGER_ID    = 1991833177  // распечатки
+const PRESENT_MANAGER_ID  = 858414038  // презентации
+
+export default function Services({ user, goBack, onOrder }) {
+  const [page, setPage] = useState("menu") // menu | chat_print | chat_present
+
+  if (page === "chat_print") return (
+    <OrderChat
+      user={user}
+      managerId={PRINT_MANAGER_ID}
+      chatType="print"
+      goBack={() => setPage("menu")}
+    />
+  )
+
+  if (page === "chat_present") return (
+    <OrderChat
+      user={user}
+      managerId={PRESENT_MANAGER_ID}
+      chatType="present"
+      goBack={() => setPage("menu")}
+    />
+  )
+
   return (
     <div style={s.root}>
       <div style={s.header}>
@@ -17,23 +42,27 @@ export default function Services({ goBack }) {
       </div>
       <div style={s.body}>
         <ServiceCard
-          icon="🖨️" title="Распечатка" desc="1 страница — 10₽ · Забрать в ДАС №6"
+          icon="🖨️"
+          title="Распечатка"
+          desc="1 страница — 10₽ · Забрать в ДАС №6"
           color="rgba(16,185,129,0.15)"
           action="Написать менеджеру"
-          url="https://t.me/infinityriver"
+          onTap={() => setPage("chat_print")}
         />
         <ServiceCard
-          icon="🎞️" title="Презентации" desc="От 250₽ · Срок: 1 день"
+          icon="🎞️"
+          title="Презентации"
+          desc="От 250₽ · Срок: 1 день"
           color="rgba(99,102,241,0.15)"
           action="Заказать"
-          url="https://t.me/mermely?text=Хочу%20заказать%20презентацию"
+          onTap={() => setPage("chat_present")}
         />
       </div>
     </div>
   )
 }
 
-function ServiceCard({ icon, title, desc, color, action, url }) {
+function ServiceCard({ icon, title, desc, color, action, onTap }) {
   return (
     <div style={{ ...s.card, background: color }}>
       <div style={s.cardTop}>
@@ -43,7 +72,7 @@ function ServiceCard({ icon, title, desc, color, action, url }) {
           <div style={s.cardDesc}>{desc}</div>
         </div>
       </div>
-      <a href={url} target="_blank" rel="noreferrer" style={s.cardBtn}>{action} →</a>
+      <button onClick={onTap} style={s.cardBtn}>{action} →</button>
     </div>
   )
 }
@@ -70,9 +99,9 @@ const s = {
   cardTitle: { fontSize: 16, fontWeight: 700, color: "#f1f5f9" },
   cardDesc: { fontSize: 13, color: "rgba(255,255,255,0.45)", marginTop: 3 },
   cardBtn: {
-    display: "block", textAlign: "center",
+    display: "block", width: "100%", textAlign: "center",
     background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)",
     borderRadius: 12, padding: "11px", color: "#f1f5f9",
-    fontSize: 14, fontWeight: 600, textDecoration: "none",
+    fontSize: 14, fontWeight: 600, cursor: "pointer",
   },
 }

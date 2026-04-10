@@ -5,11 +5,13 @@ import "./App.css"
 // ─── Глобальные константы — меняйте здесь ────────────────────────
 export const API = "https://math-tutor-webapp.onrender.com"
 
-// Telegram user_id человека который делает презентации на заказ
-// Замените на реальный ID вашего менеджера презентаций
+// Telegram user_id менеджера презентаций
 export const MANAGER_ID = 858414038
 
-// Telegram user_id администраторов бота (через запятую если несколько)
+// Telegram user_id менеджера распечаток
+export const PRINT_MANAGER_ID = 1991833177
+
+// Telegram user_id администраторов бота
 export const ADMIN_IDS = [1991833177, 808603029, 1114949712]
 // ─────────────────────────────────────────────────────────────────
 
@@ -24,20 +26,17 @@ export default function App() {
       tg.expand()
       setUser(tg.initDataUnsafe.user)
     } else {
-      // Fallback для тестирования вне Telegram
       setUser({ id: 123, first_name: "TestUser", username: "test" })
     }
   }, [])
 
   useEffect(() => {
     if (!user) return
-    // Регистрация пользователя
     fetch(`${API}/user/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: user.id, username: user.username || "" })
     }).catch(() => {})
-    // Загрузка подписки
     loadSubscription()
   }, [user])
 

@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from "react"
 import { API } from "../App"
 
-export default function OrderChat({ user, managerId, goBack, prefill }) {
+export default function OrderChat({ user, managerId, goBack, prefill, chatLabel, chatIcon }) {
+  const label = chatLabel || "Менеджер"
+  const icon  = chatIcon  || "🎞️"
+
   const [messages, setMessages]   = useState([])
   const [input, setInput]         = useState(prefill || "")
   const [sending, setSending]     = useState(false)
@@ -52,30 +55,27 @@ export default function OrderChat({ user, managerId, goBack, prefill }) {
 
   return (
     <div style={s.root}>
-      {/* Header */}
       <div style={s.header}>
         <button style={s.back} onClick={goBack}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-        <div style={s.avatar}>🎞️</div>
+        <div style={s.avatar}>{icon}</div>
         <div style={s.hinfo}>
-          <div style={s.hname}>Менеджер презентаций</div>
+          <div style={s.hname}>{label}</div>
           <div style={s.hstatus}><span style={s.dot} />онлайн</div>
         </div>
       </div>
 
-      {/* Шапка заказа */}
       <div style={s.orderBanner}>
-        💡 Напишите заказ и отправьте — менеджер ответит и пришлёт готовую презентацию
+        💡 Напишите заказ и отправьте — менеджер ответит в ближайшее время
       </div>
 
-      {/* Сообщения */}
       <div style={s.chat} ref={chatRef}>
         {messages.length === 0 && (
           <div style={s.empty}>
-            <div style={{ fontSize:42, marginBottom:8 }}>🎞️</div>
+            <div style={{ fontSize:42, marginBottom:8 }}>{icon}</div>
             <div style={s.emptyT}>Начните диалог</div>
             <div style={s.emptyD}>Опишите что нужно или отправьте заказ ниже</div>
           </div>
@@ -84,7 +84,7 @@ export default function OrderChat({ user, managerId, goBack, prefill }) {
           const isMe = msg.from_id === user.id
           return (
             <div key={msg._id} style={{ display:"flex", justifyContent: isMe ? "flex-end" : "flex-start", marginBottom:8 }}>
-              {!isMe && <div style={s.msgAvatar}>🎞️</div>}
+              {!isMe && <div style={s.msgAvatar}>{icon}</div>}
               <div style={isMe ? s.bubbleMe : s.bubbleThem}>
                 {msg.text && <div>{msg.text}</div>}
                 {msg.file_id && (
@@ -100,7 +100,6 @@ export default function OrderChat({ user, managerId, goBack, prefill }) {
         })}
       </div>
 
-      {/* Ввод */}
       <div style={s.inputArea}>
         <textarea
           value={input}
