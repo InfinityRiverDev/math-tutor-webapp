@@ -2,42 +2,51 @@ import { useEffect, useState } from "react"
 import MainPage from "./pages/MainPage"
 import "./App.css"
 
+// ─── Глобальные константы — меняйте здесь ────────────────────────
 export const API = "https://math-tutor-webapp.onrender.com"
 
+// Telegram user_id человека который делает презентации на заказ
+// Замените на реальный ID вашего менеджера презентаций
+export const MANAGER_ID = 858414038
+
+// Telegram user_id администраторов бота (через запятую если несколько)
+export const ADMIN_IDS = [1991833177, 808603029, 1114949712]
+// ─────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const [user, setUser] = useState(null)
+  const [user, setUser]               = useState(null)
   const [subscription, setSubscription] = useState(null)
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
-    if (tg && tg.initDataUnsafe?.user) {
+    if (tg?.initDataUnsafe?.user) {
       tg.ready()
       tg.expand()
       setUser(tg.initDataUnsafe.user)
     } else {
+      // Fallback для тестирования вне Telegram
       setUser({ id: 123, first_name: "TestUser", username: "test" })
     }
   }, [])
 
   useEffect(() => {
     if (!user) return
+    // Регистрация пользователя
     fetch(`${API}/user/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: user.id, username: user.username || "" })
-    })
-  }, [user])
-
-  useEffect(() => {
-    if (!user) return
+    }).catch(() => {})
+    // Загрузка подписки
     loadSubscription()
   }, [user])
 
   const loadSubscription = async () => {
+    if (!user) return
     try {
-      const res = await fetch(`${API}/billing/status?user_id=${user.id}`)
-      const data = await res.json()
-      setSubscription(data)
+      const r = await fetch(`${API}/billing/status?user_id=${user.id}`)
+      const d = await r.json()
+      setSubscription(d)
     } catch {
       setSubscription({ active: false, balance: 0 })
     }
@@ -53,8 +62,7 @@ export default function App() {
         width: 36, height: 36,
         border: "2.5px solid rgba(255,255,255,0.08)",
         borderTop: "2.5px solid #6366f1",
-        borderRadius: "50%",
-        animation: "spin 0.8s linear infinite"
+        borderRadius: "50%", animation: "spin 0.8s linear infinite"
       }} />
       <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, fontFamily: "system-ui" }}>
         Загрузка...
@@ -64,7 +72,11 @@ export default function App() {
 
   return (
     <div className="app">
-      <MainPage user={user} subscription={subscription} reloadSubscription={loadSubscription} />
+      <MainPage
+        user={user}
+        subscription={subscription}
+        reloadSub={loadSubscription}
+      />
     </div>
   )
 }
