@@ -2,21 +2,15 @@ import { useEffect, useState } from "react"
 import MainPage from "./pages/MainPage"
 import "./App.css"
 
-// ─── Глобальные константы — меняйте здесь ────────────────────────
-export const API = "https://math-tutor-webapp.onrender.com"
-
-// Telegram user_id менеджера презентаций
-export const MANAGER_ID = 858414038
-
-// Telegram user_id менеджера распечаток
-export const PRINT_MANAGER_ID = 1991833177
-
-// Telegram user_id администраторов бота
-export const ADMIN_IDS = [1991833177, 808603029, 1114949712]
+// ─── Глобальные константы ────────────────────────────────────────
+export const API              = "https://math-tutor-webapp.onrender.com"
+export const MANAGER_ID       = 858414038   // менеджер презентаций
+export const PRINT_MANAGER_ID = 1991833177  // менеджер распечаток
+export const ADMIN_IDS        = [1991833177, 808603029, 1114949712]
 // ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [user, setUser]               = useState(null)
+  const [user,         setUser]         = useState(null)
   const [subscription, setSubscription] = useState(null)
 
   useEffect(() => {

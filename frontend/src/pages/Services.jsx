@@ -1,31 +1,39 @@
+// Services.jsx — используется только из AdminPage для быстрого доступа
+// Основная логика «Услуг» для пользователя теперь в UserPage → ServicesPage
+
 import { useState } from "react"
 import { API } from "../App"
 import OrderChat from "./OrderChat"
 
-// ID менеджеров
-const PRINT_MANAGER_ID    = 1991833177  // распечатки
-const PRESENT_MANAGER_ID  = 858414038  // презентации
+const PRINT_MANAGER_ID = 1991833177
+const MANAGER_ID       = 858414038
+
+const CHAT_CONFIGS = {
+  presentation: { managerId: MANAGER_ID,       icon: "🎞️", label: "Презентации" },
+  print:        { managerId: PRINT_MANAGER_ID, icon: "🖨️", label: "Распечатка"  },
+}
 
 export default function Services({ user, goBack, onOrder }) {
-  const [page, setPage] = useState("menu") // menu | chat_print | chat_present
+  const [page,     setPage]     = useState("menu")
+  const [chatType, setChatType] = useState(null)
 
-  if (page === "chat_print") return (
-    <OrderChat
-      user={user}
-      managerId={PRINT_MANAGER_ID}
-      chatType="print"
-      goBack={() => setPage("menu")}
-    />
-  )
+  const openChat = (type) => {
+    setChatType(type)
+    setPage("chat")
+  }
 
-  if (page === "chat_present") return (
-    <OrderChat
-      user={user}
-      managerId={PRESENT_MANAGER_ID}
-      chatType="present"
-      goBack={() => setPage("menu")}
-    />
-  )
+  if (page === "chat" && chatType) {
+    const cfg = CHAT_CONFIGS[chatType]
+    return (
+      <OrderChat
+        user={user}
+        managerId={cfg.managerId}
+        chatLabel={cfg.label}
+        chatIcon={cfg.icon}
+        goBack={() => setPage("menu")}
+      />
+    )
+  }
 
   return (
     <div style={s.root}>
@@ -47,7 +55,7 @@ export default function Services({ user, goBack, onOrder }) {
           desc="1 страница — 10₽ · Забрать в ДАС №6"
           color="rgba(16,185,129,0.15)"
           action="Написать менеджеру"
-          onTap={() => setPage("chat_print")}
+          onTap={() => openChat("print")}
         />
         <ServiceCard
           icon="🎞️"
@@ -55,7 +63,7 @@ export default function Services({ user, goBack, onOrder }) {
           desc="От 250₽ · Срок: 1 день"
           color="rgba(99,102,241,0.15)"
           action="Заказать"
-          onTap={() => setPage("chat_present")}
+          onTap={() => openChat("presentation")}
         />
       </div>
     </div>
@@ -79,16 +87,8 @@ function ServiceCard({ icon, title, desc, color, action, onTap }) {
 
 const s = {
   root: { minHeight: "100vh", background: "#0a0f1e", display: "flex", flexDirection: "column", fontFamily: "system-ui" },
-  header: {
-    display: "flex", alignItems: "center", gap: 12, padding: "20px 20px 18px",
-    background: "linear-gradient(160deg, #131929 0%, #0a0f1e 100%)",
-    borderBottom: "1px solid rgba(255,255,255,0.05)",
-  },
-  backBtn: {
-    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 10, color: "#f1f5f9", padding: "7px 9px", cursor: "pointer",
-    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  },
+  header: { display: "flex", alignItems: "center", gap: 12, padding: "20px 20px 18px", background: "linear-gradient(160deg,#131929 0%,#0a0f1e 100%)", borderBottom: "1px solid rgba(255,255,255,0.05)" },
+  backBtn: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#f1f5f9", padding: "7px 9px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   headerInfo: { display: "flex", flexDirection: "column", gap: 2 },
   headerTitle: { fontSize: 18, fontWeight: 600, color: "#f1f5f9" },
   headerSub: { fontSize: 12, color: "rgba(255,255,255,0.35)" },
@@ -98,10 +98,5 @@ const s = {
   cardIcon: { fontSize: 28, flexShrink: 0 },
   cardTitle: { fontSize: 16, fontWeight: 700, color: "#f1f5f9" },
   cardDesc: { fontSize: 13, color: "rgba(255,255,255,0.45)", marginTop: 3 },
-  cardBtn: {
-    display: "block", width: "100%", textAlign: "center",
-    background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: 12, padding: "11px", color: "#f1f5f9",
-    fontSize: 14, fontWeight: 600, cursor: "pointer",
-  },
+  cardBtn: { display: "block", width: "100%", textAlign: "center", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "11px", color: "#f1f5f9", fontSize: 14, fontWeight: 600, cursor: "pointer" },
 }
