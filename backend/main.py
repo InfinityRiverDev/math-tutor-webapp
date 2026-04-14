@@ -9,8 +9,9 @@ from routes.billing      import router as billing_router
 from routes.admin_routes import router as admin_router
 from routes.schedule     import router as schedule_router
 from routes.lectures     import router as lectures_router
+from routes.music_route  import router as music_router
 
-app = FastAPI()
+app = FastAPI(title="Math Tutor API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,7 +28,13 @@ app.include_router(billing_router)   # /billing/*
 app.include_router(admin_router)     # /admin/*
 app.include_router(schedule_router)  # /schedule
 app.include_router(lectures_router)  # /lectures/*
+app.include_router(music_router)     # /music/*
+
 
 @app.get("/")
 async def root():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "docs":   "/docs",
+        "billing_debug": "/billing/debug",
+    }
