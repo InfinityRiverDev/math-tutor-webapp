@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes import calculator, tutor, user
 from routes.billing      import router as billing_router
 from routes.admin_routes import router as admin_router
-from routes.admin_stats  import router as admin_stats_router   # ← NEW
+from routes.admin_stats  import router as admin_stats_router
 from routes.schedule     import router as schedule_router
 from routes.lectures     import router as lectures_router
 from routes.music_route  import router as music_router

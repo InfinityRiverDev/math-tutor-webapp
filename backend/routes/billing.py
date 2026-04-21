@@ -1,8 +1,12 @@
 """
-routes/billing.py  — добавлены: Stars, Crypto, Trial, исправлен YooKassa topup
+routes/billing.py  —  /billing/*
+Оригинал + Stars + Crypto + Trial (пробный период)
 """
 
-import os, uuid, logging, aiohttp
+import os
+import uuid
+import logging
+import aiohttp
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Request, UploadFile, File, Form
 from pydantic import BaseModel
@@ -15,18 +19,21 @@ from database.billing_models import (
     get_active_subscription, activate_subscription,
     save_payment, get_payment_by_id, update_payment_status,
     save_chat_message, get_chat_messages,
-    get_all_chats_for_manager, mark_messages_read
+    get_all_chats_for_manager, mark_messages_read,
+    payments, subscriptions
 )
+from database.mongo import db
 
 router = APIRouter(prefix="/billing")
 logger = logging.getLogger(__name__)
 
 STARS_TO_RUB = float(os.getenv("STARS_TO_RUB", "1.75"))
+trial_usage  = db["trial_usage"]
 
 
-def get_shop_id():   return os.getenv("YOOKASSA_SHOP_ID", "")
-def get_secret():    return os.getenv("YOOKASSA_SECRET_KEY", "")
-def get_bot_token(): return os.getenv("TOKEN") or os.getenv("BOT_TOKEN", "")
+def get_shop_id():      return os.getenv("YOOKASSA_SHOP_ID", "")
+def get_secret():       return os.getenv("YOOKASSA_SECRET_KEY", "")
+def get_bot_token():    return os.getenv("TOKEN") or os.getenv("BOT_TOKEN", "")
 def get_crypto_token(): return os.getenv("CRYPTO_PAY_TOKEN", "")
 def get_bot_username(): return os.getenv("BOT_USERNAME", "")
 
@@ -38,7 +45,38 @@ def get_return_url():
     )
 
 
-# ── Debug ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# ВСПОМОГАТЕЛЬНАЯ: сохраняем расширенный платёж в MongoDB напрямую
+# (не перезаписываем save_payment из billing_models)
+# ─────────────────────────────────────────────────────────────────
+
+async def _save_payment_extended(
+    user_id: int,
+    payment_id: str,
+    amount_rub: float,
+    status: str,
+    payment_type: str,      # "yookassa" | "stars" | "crypto"
+    original_amount: float,
+    currency: str,          # "RUB" | "XTR" | "USDT"
+):
+    await payments.insert_one({
+        "user_id":         user_id,
+        "payment_id":      payment_id,
+        "amount":          amount_rub,      # обратная совместимость
+        "amount_rub":      amount_rub,
+        "original_amount": original_amount,
+        "currency":        currency,
+        "type":            payment_type,
+        "status":          status,
+        "credited":        False,
+        "created_at":      datetime.now().isoformat(),
+        "updated_at":      None,
+    })
+
+
+# ─────────────────────────────────────────────────────────────────
+# Debug
+# ─────────────────────────────────────────────────────────────────
 
 @router.get("/debug")
 async def billing_debug():
@@ -53,11 +91,13 @@ async def billing_debug():
         "CRYPTO_PAY_TOKEN":    (crypto[:8] + "***")  if crypto  else "НЕ ЗАДАН ❌",
         "STARS_TO_RUB":        STARS_TO_RUB,
         "return_url":          get_return_url(),
-        "webhook_url":         f"{get_return_url()}/billing/webhook/yookassa",
+        "webhook_yookassa":    f"{get_return_url()}/billing/webhook/yookassa",
     }
 
 
-# ── Статус ────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Статус подписки
+# ─────────────────────────────────────────────────────────────────
 
 @router.get("/status")
 async def billing_status(user_id: int):
@@ -76,14 +116,18 @@ async def billing_status(user_id: int):
     return {"active": False, "balance": balance}
 
 
-# ── Тарифы ────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Тарифы
+# ─────────────────────────────────────────────────────────────────
 
 @router.get("/plans")
 async def get_plans():
     return {"plans": await get_all_plans()}
 
 
-# ── Пополнение рублями (ЮКасса) ──────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Пополнение — рублями (ЮКасса)
+# ─────────────────────────────────────────────────────────────────
 
 class TopupReq(BaseModel):
     user_id: int
@@ -101,7 +145,8 @@ async def create_topup(req: TopupReq):
         return {
             "error": (
                 "ЮКасса не настроена. "
-                "Добавьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в переменные окружения на Render."
+                "Добавьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY "
+                "в переменные окружения на Render."
             )
         }
 
@@ -115,20 +160,24 @@ async def create_topup(req: TopupReq):
         return {
             "error": (
                 "Не удалось создать платёж ЮКасса. "
-                "Проверьте настройки на /billing/debug и убедитесь что магазин активирован в ЮКасса."
+                "Зайдите на /billing/debug и проверьте SHOP_ID и SECRET_KEY. "
+                "Убедитесь что магазин активирован в личном кабинете ЮКасса."
             )
         }
 
+    # Сохраняем через оригинальный save_payment (4 аргумента)
     await save_payment(req.user_id, payment_id, req.amount, "pending")
     logger.info(f"[TOPUP-RUB] user={req.user_id} amount={req.amount} id={payment_id}")
     return {"payment_url": payment_url, "payment_id": payment_id}
 
 
-# ── Пополнение Stars ─────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Пополнение — Telegram Stars
+# ─────────────────────────────────────────────────────────────────
 
 class StarsTopupReq(BaseModel):
     user_id: int
-    stars:   int          # количество звёзд
+    stars:   int
 
 @router.post("/topup-stars")
 async def create_topup_stars(req: StarsTopupReq):
@@ -137,53 +186,50 @@ async def create_topup_stars(req: StarsTopupReq):
 
     token = get_bot_token()
     if not token:
-        return {"error": "Бот не настроен"}
+        return {"error": "Бот не настроен (TOKEN не задан)"}
 
     amount_rub = round(req.stars * STARS_TO_RUB, 2)
     payment_id = str(uuid.uuid4())
 
-    # Создаём Invoice через Telegram Bot API
     try:
         async with aiohttp.ClientSession() as session:
             resp = await session.post(
                 f"https://api.telegram.org/bot{token}/createInvoiceLink",
                 json={
-                    "title":          "Пополнение кошелька",
-                    "description":    f"Пополнение на {req.stars} ⭐ = {amount_rub}₽",
-                    "payload":        f"topup_stars_{req.user_id}_{payment_id}",
-                    "currency":       "XTR",
-                    "prices":         [{"label": "Пополнение", "amount": req.stars}],
+                    "title":       "Пополнение кошелька",
+                    "description": f"{req.stars} ⭐ = {amount_rub}₽",
+                    "payload":     f"topup_stars_{req.user_id}_{payment_id}",
+                    "currency":    "XTR",
+                    "prices":      [{"label": "Пополнение", "amount": req.stars}],
                 }
             )
             data = await resp.json()
             if not data.get("ok"):
-                logger.error(f"[STARS] TG error: {data}")
-                return {"error": f"Ошибка Telegram: {data.get('description', 'unknown')}"}
+                return {"error": f"Telegram: {data.get('description', 'ошибка')}"}
             invoice_url = data["result"]
     except Exception as e:
-        logger.error(f"[STARS] exception: {e}")
+        logger.error(f"[STARS] {e}")
         return {"error": str(e)}
 
-    await save_payment(req.user_id, payment_id, amount_rub, "pending_stars",
-                       payment_type="stars", original_amount=req.stars)
-    logger.info(f"[TOPUP-STARS] user={req.user_id} stars={req.stars} rub={amount_rub}")
+    await _save_payment_extended(
+        req.user_id, payment_id, amount_rub, "pending_stars",
+        "stars", req.stars, "XTR"
+    )
     return {"invoice_url": invoice_url, "payment_id": payment_id, "amount_rub": amount_rub}
 
 
-# ── Вебхук Stars (pre_checkout_query + successful_payment) ────────
+# ─────────────────────────────────────────────────────────────────
+# Вебхук Stars (successful_payment через бота)
+# ─────────────────────────────────────────────────────────────────
 
 @router.post("/webhook/stars")
 async def stars_webhook(request: Request):
-    """
-    Добавьте этот роут в бот как дополнительный вебхук,
-    или обрабатывайте successful_payment в aiogram.
-    """
     try:
         payload = await request.json()
     except Exception:
         return {"ok": False}
 
-    # Обрабатываем pre_checkout_query
+    # pre_checkout_query
     if "pre_checkout_query" in payload:
         pcq_id = payload["pre_checkout_query"]["id"]
         token  = get_bot_token()
@@ -201,8 +247,7 @@ async def stars_webhook(request: Request):
     if not sp:
         return {"ok": True}
 
-    payload_str = sp.get("invoice_payload", "")
-    parts = payload_str.split("_")  # topup_stars_USER_ID_PAYMENT_ID
+    parts = sp.get("invoice_payload", "").split("_")
     if len(parts) >= 5 and parts[0] == "topup" and parts[1] == "stars":
         user_id    = int(parts[2])
         payment_id = "_".join(parts[3:])
@@ -213,8 +258,7 @@ async def stars_webhook(request: Request):
         if existing and existing.get("status") != "succeeded":
             await top_up_balance(user_id, amount_rub)
             await update_payment_status(payment_id, "succeeded")
-            logger.info(f"[STARS WEBHOOK] ✅ {stars}⭐ = {amount_rub}₽ → user {user_id}")
-
+            logger.info(f"[STARS WEBHOOK] ✅ {stars}⭐={amount_rub}₽ → user {user_id}")
             token = get_bot_token()
             if token:
                 try:
@@ -222,18 +266,19 @@ async def stars_webhook(request: Request):
                         await s.post(
                             f"https://api.telegram.org/bot{token}/sendMessage",
                             json={
-                                "chat_id":    user_id,
-                                "text":       f"⭐ <b>Оплата Stars получена!</b>\n\n{stars} ⭐ = {amount_rub:.0f}₽ зачислено на баланс.",
+                                "chat_id": user_id,
+                                "text":    f"⭐ <b>Stars получены!</b>\n{stars} ⭐ = {amount_rub:.0f}₽ зачислено.",
                                 "parse_mode": "HTML"
                             }
                         )
                 except Exception:
                     pass
-
     return {"ok": True}
 
 
-# ── Пополнение Crypto (CryptoBot) ─────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Пополнение — USDT (CryptoBot)
+# ─────────────────────────────────────────────────────────────────
 
 class CryptoTopupReq(BaseModel):
     user_id:     int
@@ -246,7 +291,7 @@ async def create_topup_crypto(req: CryptoTopupReq):
 
     crypto_token = get_crypto_token()
     if not crypto_token:
-        return {"error": "CryptoBot не настроен (CRYPTO_PAY_TOKEN не задан)"}
+        return {"error": "CryptoBot не настроен (CRYPTO_PAY_TOKEN не задан в .env)"}
 
     bot_username = get_bot_username()
     payment_id   = str(uuid.uuid4())
@@ -256,31 +301,37 @@ async def create_topup_crypto(req: CryptoTopupReq):
             async with session.post(
                 "https://pay.crypt.bot/api/createInvoice",
                 json={
-                    "asset":          "USDT",
-                    "amount":         str(req.amount_usdt),
-                    "description":    f"Пополнение кошелька MathTutor user {req.user_id}",
-                    "payload":        f"topup_crypto_{req.user_id}_{payment_id}",
-                    "paid_btn_name":  "openBot",
-                    "paid_btn_url":   f"https://t.me/{bot_username}" if bot_username else get_return_url(),
+                    "asset":         "USDT",
+                    "amount":        str(req.amount_usdt),
+                    "description":   f"Пополнение MathTutor user {req.user_id}",
+                    "payload":       f"topup_crypto_{req.user_id}_{payment_id}",
+                    "paid_btn_name": "openBot",
+                    "paid_btn_url":  (
+                        f"https://t.me/{bot_username}"
+                        if bot_username else get_return_url()
+                    ),
                 },
                 headers={"Crypto-Pay-API-Token": crypto_token}
             ) as resp:
                 data = await resp.json()
                 if not data.get("ok"):
-                    return {"error": f"CryptoBot error: {data}"}
-                inv    = data["result"]
+                    return {"error": f"CryptoBot: {data}"}
+                inv     = data["result"]
                 pay_url = inv.get("pay_url") or inv.get("bot_invoice_url")
     except Exception as e:
         return {"error": str(e)}
 
-    # Сохраняем ожидающий платёж (сумму в рублях посчитаем по факту)
-    await save_payment(req.user_id, payment_id, 0, "pending_crypto",
-                       payment_type="crypto", original_amount=req.amount_usdt)
-    logger.info(f"[TOPUP-CRYPTO] user={req.user_id} usdt={req.amount_usdt}")
+    await _save_payment_extended(
+        req.user_id, payment_id, 0, "pending_crypto",
+        "crypto", req.amount_usdt, "USDT"
+    )
     return {"pay_url": pay_url, "payment_id": payment_id}
 
 
+# ─────────────────────────────────────────────────────────────────
 # Вебхук CryptoBot
+# ─────────────────────────────────────────────────────────────────
+
 @router.post("/webhook/crypto")
 async def crypto_webhook(request: Request):
     try:
@@ -291,34 +342,35 @@ async def crypto_webhook(request: Request):
     if payload.get("update_type") != "invoice_paid":
         return {"ok": True}
 
-    inv = payload.get("payload", {})
+    inv         = payload.get("payload", {})
     our_payload = inv.get("payload", "")
-    parts = our_payload.split("_")  # topup_crypto_USER_ID_PAYMENT_ID
+    parts       = our_payload.split("_")
 
     if len(parts) < 5 or parts[0] != "topup" or parts[1] != "crypto":
         return {"ok": True}
 
-    user_id    = int(parts[2])
-    payment_id = "_".join(parts[3:])
+    user_id     = int(parts[2])
+    payment_id  = "_".join(parts[3:])
     usdt_amount = float(inv.get("amount", 0))
 
-    # Получаем курс USDT→RUB
     try:
         async with aiohttp.ClientSession() as s:
-            r    = await s.get("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=rub")
-            data = await r.json()
-            rate = float(data["tether"]["rub"])
+            r    = await s.get(
+                "https://api.coingecko.com/api/v3/simple/price"
+                "?ids=tether&vs_currencies=rub"
+            )
+            d    = await r.json()
+            rate = float(d["tether"]["rub"])
     except Exception:
-        rate = 90.0  # запасной курс
+        rate = 90.0
 
     amount_rub = round(usdt_amount * rate, 2)
+    existing   = await get_payment_by_id(payment_id)
 
-    existing = await get_payment_by_id(payment_id)
     if existing and existing.get("status") != "succeeded":
         await top_up_balance(user_id, amount_rub)
         await update_payment_status(payment_id, "succeeded")
-        logger.info(f"[CRYPTO WEBHOOK] ✅ {usdt_amount} USDT = {amount_rub}₽ → user {user_id}")
-
+        logger.info(f"[CRYPTO WEBHOOK] ✅ {usdt_amount}USDT={amount_rub}₽ → user {user_id}")
         token = get_bot_token()
         if token:
             try:
@@ -326,46 +378,40 @@ async def crypto_webhook(request: Request):
                     await s.post(
                         f"https://api.telegram.org/bot{token}/sendMessage",
                         json={
-                            "chat_id":    user_id,
-                            "text":       f"₮ <b>Крипто-оплата получена!</b>\n\n{usdt_amount} USDT = {amount_rub:.0f}₽ зачислено на баланс.",
+                            "chat_id": user_id,
+                            "text":    f"₮ <b>Крипта получена!</b>\n{usdt_amount} USDT = {amount_rub:.0f}₽ зачислено.",
                             "parse_mode": "HTML"
                         }
                     )
             except Exception:
                 pass
-
     return {"ok": True}
 
 
-# ── Пробный период ────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Пробный период
+# ─────────────────────────────────────────────────────────────────
 
 @router.get("/trial/check")
 async def trial_check(user_id: int):
-    from database.billing_models import db as billing_db
-    trial_usage = billing_db["trial_usage"]
     doc = await trial_usage.find_one({"user_id": user_id})
     return {"used": doc is not None}
+
 
 class TrialReq(BaseModel):
     user_id: int
 
 @router.post("/trial/activate")
 async def trial_activate(req: TrialReq):
-    from database.billing_models import db as billing_db
-    trial_usage = billing_db["trial_usage"]
-
-    # Проверяем не использован ли уже
     if await trial_usage.find_one({"user_id": req.user_id}):
-        return {"success": False, "error": "Пробный период уже был активирован"}
+        return {"success": False, "error": "Пробный период уже был использован"}
 
-    # Проверяем нет ли активной подписки
     existing = await get_active_subscription(req.user_id)
     if existing:
         return {"success": False, "error": "У вас уже есть активная подписка"}
 
     expires = datetime.now() + timedelta(days=2)
-    subs_col = billing_db["subscriptions"]
-    await subs_col.update_one(
+    await subscriptions.update_one(
         {"user_id": req.user_id},
         {"$set": {
             "user_id":      req.user_id,
@@ -381,12 +427,13 @@ async def trial_activate(req: TrialReq):
         "user_id":      req.user_id,
         "activated_at": datetime.now().isoformat(),
     })
-
-    logger.info(f"[TRIAL] activated for user={req.user_id}")
+    logger.info(f"[TRIAL] activated user={req.user_id}")
     return {"success": True, "expires_at": expires.isoformat()}
 
 
-# ── Промокод ──────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Промокод
+# ─────────────────────────────────────────────────────────────────
 
 class PromoReq(BaseModel):
     code: str
@@ -399,7 +446,9 @@ async def check_promo(req: PromoReq):
     return {"valid": True, "discount_percent": promo["discount_percent"], "code": promo["code"]}
 
 
-# ── Покупка тарифа ────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Покупка тарифа
+# ─────────────────────────────────────────────────────────────────
 
 class SubscribeReq(BaseModel):
     user_id:    int
@@ -423,24 +472,34 @@ async def subscribe(req: SubscribeReq):
     ok = await deduct_balance(req.user_id, final_price)
     if not ok:
         bal = await get_balance(req.user_id)
-        return {"success": False, "error": f"Недостаточно средств. Баланс: {bal:.2f}₽, нужно: {final_price}₽"}
+        return {"success": False,
+                "error": f"Недостаточно средств. Баланс: {bal:.2f}₽, нужно: {final_price}₽"}
 
     if promo:
         await use_promo(promo["code"])
 
-    await activate_subscription(req.user_id, req.plan_id, plan["duration_days"], plan["name"])
+    await activate_subscription(
+        req.user_id, req.plan_id, plan["duration_days"], plan["name"]
+    )
     sub = await get_active_subscription(req.user_id)
-    return {"success": True, "plan_name": plan["name"], "expires_at": sub["expires_at"] if sub else None}
+    logger.info(f"[SUBSCRIBE] user={req.user_id} plan={plan['name']} price={final_price}")
+    return {
+        "success":    True,
+        "plan_name":  plan["name"],
+        "expires_at": sub["expires_at"] if sub else None,
+    }
 
 
-# ── Вебхук ЮКасса ─────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Вебхук ЮКасса
+# ─────────────────────────────────────────────────────────────────
 
 @router.post("/webhook/yookassa")
 async def yookassa_webhook(request: Request):
     try:
         payload = await request.json()
     except Exception as e:
-        logger.error(f"[WEBHOOK] bad json: {e}")
+        logger.error(f"[WEBHOOK YK] bad json: {e}")
         return {"ok": False}
 
     if payload.get("event") != "payment.succeeded":
@@ -450,6 +509,7 @@ async def yookassa_webhook(request: Request):
     amount = float(obj.get("amount", {}).get("value", 0))
     meta   = obj.get("metadata", {})
     our_id = meta.get("payment_id")
+
     if not our_id:
         return {"ok": True}
 
@@ -460,7 +520,7 @@ async def yookassa_webhook(request: Request):
     user_id = existing["user_id"]
     await top_up_balance(user_id, amount)
     await update_payment_status(our_id, "succeeded")
-    logger.info(f"[YOOKASSA WEBHOOK] ✅ {amount}₽ → user {user_id}")
+    logger.info(f"[YK WEBHOOK] ✅ {amount}₽ → user {user_id}")
 
     token = get_bot_token()
     if token:
@@ -468,15 +528,21 @@ async def yookassa_webhook(request: Request):
             async with aiohttp.ClientSession() as session:
                 await session.post(
                     f"https://api.telegram.org/bot{token}/sendMessage",
-                    json={"chat_id": user_id, "text": f"✅ <b>Кошелёк пополнен на {amount:.0f}₽!</b>", "parse_mode": "HTML"}
+                    json={
+                        "chat_id":    user_id,
+                        "text":       f"✅ <b>Кошелёк пополнен на {amount:.0f}₽!</b>\n\nОткройте приложение — баланс уже обновлён.",
+                        "parse_mode": "HTML",
+                    }
                 )
         except Exception as e:
-            logger.error(f"[WEBHOOK] notify error: {e}")
+            logger.error(f"[YK WEBHOOK] notify error: {e}")
 
     return {"ok": True}
 
 
-# ── Тест пополнения (только для разработки) ───────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Тестовое пополнение (только для разработки)
+# ─────────────────────────────────────────────────────────────────
 
 class TestTopupReq(BaseModel):
     user_id: int
@@ -491,7 +557,9 @@ async def manual_topup_test(req: TestTopupReq):
     return {"ok": True, "new_balance": await get_balance(req.user_id)}
 
 
-# ── Чат — сообщения ───────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Чат заказов
+# ─────────────────────────────────────────────────────────────────
 
 class SendMsgReq(BaseModel):
     from_id:   int
@@ -504,33 +572,36 @@ class SendMsgReq(BaseModel):
 async def chat_send(req: SendMsgReq):
     if not req.text and not req.file_id:
         return {"success": False, "error": "Нет текста или файла"}
-    msg_id = await save_chat_message(req.from_id, req.to_id, req.text, req.file_id, req.file_name)
 
+    msg_id = await save_chat_message(
+        req.from_id, req.to_id, req.text, req.file_id, req.file_name
+    )
     token = get_bot_token()
     if token:
         try:
             async with aiohttp.ClientSession() as session:
                 await session.post(
                     f"https://api.telegram.org/bot{token}/sendMessage",
-                    json={"chat_id": req.to_id, "text": f"💬 Новое сообщение!\n{req.text or '[файл]'}"}
+                    json={"chat_id": req.to_id,
+                          "text":    f"💬 Новое сообщение!\n{req.text or '[файл]'}"}
                 )
         except Exception:
             pass
-
     return {"success": True, "msg_id": msg_id}
 
 
 @router.post("/chat/send-file")
 async def chat_send_file(
-    from_id: int       = Form(...),
-    to_id:   int       = Form(...),
+    from_id: int        = Form(...),
+    to_id:   int        = Form(...),
     file:    UploadFile = File(...)
 ):
     if not file.filename.endswith(".pptx"):
         return {"success": False, "error": "Только .pptx файлы"}
+
     token = get_bot_token()
     if not token:
-        return {"success": False, "error": "BOT TOKEN не задан"}
+        return {"success": False, "error": "BOT TOKEN не задан в .env"}
 
     file_bytes = await file.read()
     file_id_tg = None
@@ -540,9 +611,14 @@ async def chat_send_file(
             form = aiohttp.FormData()
             form.add_field("chat_id", str(to_id))
             form.add_field("caption", f"📎 Презентация: {file.filename}")
-            form.add_field("document", file_bytes, filename=file.filename,
-                           content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-            resp = await session.post(f"https://api.telegram.org/bot{token}/sendDocument", data=form)
+            form.add_field(
+                "document", file_bytes,
+                filename=file.filename,
+                content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            )
+            resp = await session.post(
+                f"https://api.telegram.org/bot{token}/sendDocument", data=form
+            )
             data = await resp.json()
             if data.get("ok"):
                 file_id_tg = data["result"]["document"]["file_id"]
@@ -551,7 +627,10 @@ async def chat_send_file(
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-    msg_id = await save_chat_message(from_id=from_id, to_id=to_id, file_id=file_id_tg, file_name=file.filename)
+    msg_id = await save_chat_message(
+        from_id=from_id, to_id=to_id,
+        text=None, file_id=file_id_tg, file_name=file.filename
+    )
     return {"success": True, "msg_id": msg_id, "file_id": file_id_tg}
 
 
@@ -560,9 +639,11 @@ async def chat_messages_route(user_a: int, user_b: int):
     await mark_messages_read(from_id=user_a, to_id=user_b)
     return {"messages": await get_chat_messages(user_a, user_b)}
 
+
 @router.get("/chat/orders")
 async def chat_orders(manager_id: int):
     return {"chats": await get_all_chats_for_manager(manager_id)}
+
 
 @router.get("/chat/user-info")
 async def chat_user_info(user_id: int):
@@ -570,13 +651,25 @@ async def chat_user_info(user_id: int):
     profile = await get_user_profile(user_id)
     if not profile:
         return {"name": f"User {user_id}", "username": "", "group": ""}
-    name = f"{profile.get('first_name','') or ''} {profile.get('last_name','') or ''}".strip() or f"User {user_id}"
-    return {"name": name, "username": profile.get("username",""), "group": profile.get("group_number","")}
+    name = (
+        f"{profile.get('first_name','') or ''} "
+        f"{profile.get('last_name','') or ''}".strip()
+        or f"User {user_id}"
+    )
+    return {
+        "name":     name,
+        "username": profile.get("username", ""),
+        "group":    profile.get("group_number", ""),
+    }
 
 
-# ── Утилита: создание платежа ЮКасса ─────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+# Утилита: создать платёж ЮКасса
+# ─────────────────────────────────────────────────────────────────
 
-async def _create_yookassa_payment(amount: float, payment_id: str, description: str) -> Optional[str]:
+async def _create_yookassa_payment(
+    amount: float, payment_id: str, description: str
+) -> Optional[str]:
     shop_id    = get_shop_id()
     secret     = get_secret()
     return_url = get_return_url()
@@ -596,7 +689,7 @@ async def _create_yookassa_payment(amount: float, payment_id: str, description: 
                 headers={"Idempotence-Key": payment_id},
             ) as resp:
                 data = await resp.json()
-                logger.info(f"[YOOKASSA] status={resp.status}")
+                logger.info(f"[YOOKASSA] status={resp.status} resp={data}")
                 if resp.status not in (200, 201):
                     logger.error(f"[YOOKASSA] error: {data}")
                     return None
@@ -604,24 +697,3 @@ async def _create_yookassa_payment(amount: float, payment_id: str, description: 
     except Exception as e:
         logger.error(f"[YOOKASSA] exception: {e}")
         return None
-
-
-# ── Вспомогательная функция сохранения платежа (расширенная) ──────
-
-async def save_payment(user_id, payment_id, amount, status,
-                        payment_type="yookassa", original_amount=None, currency=None):
-    from database.billing_models import payments
-    from datetime import datetime
-    await payments.insert_one({
-        "user_id":         user_id,
-        "payment_id":      payment_id,
-        "amount_rub":      amount,
-        "amount":          amount,   # для обратной совместимости
-        "original_amount": original_amount or amount,
-        "currency":        currency or ("XTR" if payment_type == "stars" else "USDT" if payment_type == "crypto" else "RUB"),
-        "type":            payment_type,
-        "status":          status,
-        "credited":        False,
-        "created_at":      datetime.now().isoformat(),
-        "updated_at":      None,
-    })
