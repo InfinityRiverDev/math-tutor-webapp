@@ -1,20 +1,24 @@
 import { useState, useEffect, useRef } from "react"
 import { API } from "../App"
+import Desmos from "./Desmos"
 
-export default function Education({ user, goBack }) {
-  const [view, setView] = useState("menu")
+export default function Education({ user, goBack, initialView }) {
+  const [view, setView] = useState(initialView ?? "menu")
 
   if (view === "schedule") return <Schedule user={user} goBack={() => setView("menu")} />
   if (view === "lectures") return <Lectures goBack={() => setView("menu")} />
+  if (view === "desmos")   return <Desmos   goBack={() => setView("menu")} />
 
   return (
     <div style={s.root}>
-      <Hdr title="📚 Образование" sub="Расписание и лекции" onBack={goBack} />
+      <Hdr title="📚 Образование" sub="Учёба и инструменты" onBack={goBack} />
       <div style={s.body}>
         <NavCard icon="📆" title="Расписание" desc="По дням, листание вперёд-назад"
           color="#0ea5e9" glow="rgba(14,165,233,0.15)" onClick={() => setView("schedule")} />
         <NavCard icon="📖" title="Лекции" desc="PDF-материалы по предметам"
           color="#6366f1" glow="rgba(99,102,241,0.15)" onClick={() => setView("lectures")} />
+        <NavCard icon="📊" title="Desmos" desc="Графики, калькуляторы, геометрия"
+          color="#10b981" glow="rgba(16,185,129,0.15)" onClick={() => setView("desmos")} />
       </div>
     </div>
   )
@@ -31,7 +35,6 @@ function Schedule({ user, goBack }) {
   const [showDateInput, setShowDateInput] = useState(false)
   const [dateInput,     setDateInput]     = useState("")
 
-  // Свайп
   const touchStartX = useRef(null)
   const touchStartY = useRef(null)
 
@@ -44,67 +47,44 @@ function Schedule({ user, goBack }) {
     if (touchStartX.current === null) return
     const dx = e.changedTouches[0].clientX - touchStartX.current
     const dy = e.changedTouches[0].clientY - touchStartY.current
-    // Горизонтальный свайп должен быть больше вертикального
     if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
-      if (dx < 0) navigate(1)   // свайп влево → следующий день
-      else        navigate(-1)  // свайп вправо → предыдущий день
+      if (dx < 0) navigate(1)
+      else        navigate(-1)
     }
-    touchStartX.current = null
-    touchStartY.current = null
+    touchStartX.current = null; touchStartY.current = null
   }
 
   useEffect(() => { load(new Date()) }, [])
 
   const load = async (d) => {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
-      const iso = d.toISOString().split("T")[0]
-      const r   = await fetch(`${API}/schedule?user_id=${user.id}&date=${iso}`)
+      const iso  = d.toISOString().split("T")[0]
+      const r    = await fetch(`${API}/schedule?user_id=${user.id}&date=${iso}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data = await r.json()
-      if (!data.ok) {
-        setError(data.error || "Не удалось загрузить расписание")
-        setDays({})
-      } else {
-        setDays(data.days ?? {})
-        setWeekNum(data.week_num)
-      }
-    } catch (e) {
-      setError(`Ошибка соединения: ${e.message}`)
-      setDays({})
-    } finally {
-      setLoading(false)
-    }
+      if (!data.ok) { setError(data.error || "Не удалось загрузить расписание"); setDays({}) }
+      else { setDays(data.days ?? {}); setWeekNum(data.week_num) }
+    } catch (e) { setError(`Ошибка соединения: ${e.message}`); setDays({}) }
+    finally { setLoading(false) }
   }
 
   const navigate = (delta) => {
-    const d = new Date(targetDate)
-    d.setDate(d.getDate() + delta)
-    setTargetDate(d)
-    load(d)
+    const d = new Date(targetDate); d.setDate(d.getDate() + delta)
+    setTargetDate(d); load(d)
   }
 
-  const goToday = () => {
-    const d = new Date()
-    setTargetDate(d)
-    load(d)
-  }
+  const goToday = () => { const d = new Date(); setTargetDate(d); load(d) }
 
   const applyDateInput = () => {
     const p = dateInput.split(".")
     if (p.length === 3) {
       const d = new Date(`${p[2]}-${p[1]}-${p[0]}`)
-      if (!isNaN(d)) {
-        setTargetDate(d)
-        load(d)
-        setShowDateInput(false)
-        setDateInput("")
-      }
+      if (!isNaN(d)) { setTargetDate(d); load(d); setShowDateInput(false); setDateInput("") }
     }
   }
 
-  const DAYS_RU = ["Воскресенье","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота"]
+  const DAYS_RU  = ["Воскресенье","Понедельник","Вторник","Среда","Четверг","Пятница","Суббота"]
   const dayOfWeek = targetDate.getDay()
   const isoWeekday = dayOfWeek === 0 ? 7 : dayOfWeek
   const lessons    = days[String(isoWeekday)] ?? []
@@ -112,14 +92,8 @@ function Schedule({ user, goBack }) {
   const dateStr    = targetDate.toLocaleDateString("ru", {day:"2-digit", month:"2-digit", year:"numeric"})
 
   return (
-    <div
-      style={s.root}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div style={s.root} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <Hdr title="📆 Расписание" sub={weekNum ? `Неделя №${weekNum}` : ""} onBack={goBack} />
-
-      {/* Навигация */}
       <div style={sc.nav}>
         <button style={sc.navBtn} onClick={() => navigate(-1)}>◀️</button>
         <div style={sc.navCenter} onClick={() => setShowDateInput(v => !v)}>
@@ -128,11 +102,7 @@ function Schedule({ user, goBack }) {
         </div>
         <button style={sc.navBtn} onClick={() => navigate(1)}>▶️</button>
       </div>
-
-      {!isToday && (
-        <button style={sc.todayBtn} onClick={goToday}>📍 Сегодня</button>
-      )}
-
+      {!isToday && <button style={sc.todayBtn} onClick={goToday}>📍 Сегодня</button>}
       {showDateInput && (
         <div style={sc.dateRow}>
           <input value={dateInput} onChange={e => setDateInput(e.target.value)}
@@ -140,13 +110,9 @@ function Schedule({ user, goBack }) {
           <button style={sc.dateBtn} onClick={applyDateInput}>→</button>
         </div>
       )}
-
-      {/* Подсказка свайпа */}
       <div style={sc.swipeHint}>← свайп для смены дня →</div>
-
       <div style={{ padding:"0 16px 32px" }}>
         {loading && <div style={sc.center}><Spinner /></div>}
-
         {!loading && error && (
           <div style={sc.errCard}>
             <div style={sc.errTitle}>⚠️ Не удалось загрузить</div>
@@ -154,11 +120,7 @@ function Schedule({ user, goBack }) {
             <button style={sc.retryBtn} onClick={() => load(targetDate)}>Повторить</button>
           </div>
         )}
-
-        {!loading && !error && lessons.length === 0 && (
-          <div style={sc.empty}>📭 Занятий нет</div>
-        )}
-
+        {!loading && !error && lessons.length === 0 && <div style={sc.empty}>📭 Занятий нет</div>}
         {!loading && !error && lessons.map((lesson, i) => (
           <div key={i} style={sc.card}>
             <div style={sc.cardLeft}>
@@ -166,14 +128,10 @@ function Schedule({ user, goBack }) {
               <div style={sc.cardTime}>{lesson._time_start}<br/>{lesson._time_end}</div>
             </div>
             <div style={sc.cardBody}>
-              <div style={sc.cardPara}>
-                {lesson._slot_num} пара
-                {lesson.idk_lesson_abbr ? ` · ${lesson.idk_lesson_abbr}` : ""}
-              </div>
+              <div style={sc.cardPara}>{lesson._slot_num} пара{lesson.idk_lesson_abbr ? ` · ${lesson.idk_lesson_abbr}` : ""}</div>
               <div style={sc.cardSubj}>{lesson.id_discipline_name || "—"}</div>
-              {lesson.id_e_fio && <div style={sc.cardMeta}>👤 {lesson.id_e_fio}</div>}
+              {lesson.id_e_fio      && <div style={sc.cardMeta}>👤 {lesson.id_e_fio}</div>}
               {lesson.id_premises_name && <div style={sc.cardMeta}>🚪 {lesson.id_premises_name}</div>}
-              {lesson.note && <div style={sc.cardMeta}>📎 {lesson.note}</div>}
             </div>
           </div>
         ))}
@@ -185,12 +143,12 @@ function Schedule({ user, goBack }) {
 // ── Лекции ────────────────────────────────────────────────────────
 
 function Lectures({ goBack }) {
-  const [subjects, setSubjects]       = useState([])
-  const [selSubj,  setSelSubj]        = useState(null)
-  const [lectures, setLectures]       = useState([])
-  const [loading,  setLoading]        = useState(true)
-  const [lectLoad, setLectLoad]       = useState(false)
-  const [error,    setError]          = useState(null)
+  const [subjects, setSubjects] = useState([])
+  const [selSubj,  setSelSubj]  = useState(null)
+  const [lectures, setLectures] = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [lectLoad, setLectLoad] = useState(false)
+  const [error,    setError]    = useState(null)
 
   useEffect(() => {
     fetch(`${API}/lectures/subjects`)
@@ -200,26 +158,19 @@ function Lectures({ goBack }) {
   }, [])
 
   const openSubject = async (subj) => {
-    setSelSubj(subj)
-    setLectLoad(true)
+    setSelSubj(subj); setLectLoad(true)
     try {
       const r = await fetch(`${API}/lectures/by-subject/${subj._id}`)
       const d = await r.json()
       setLectures(d.lectures ?? [])
-    } catch {
-      setLectures([])
-    } finally {
-      setLectLoad(false)
-    }
+    } catch { setLectures([]) }
+    finally { setLectLoad(false) }
   }
 
   const openLecture = (lec) => {
     const url = `${API}/lectures/file/${lec._id}`
-    if (window.Telegram?.WebApp?.openLink) {
-      window.Telegram.WebApp.openLink(url)
-    } else {
-      window.open(url, "_blank")
-    }
+    if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(url)
+    else window.open(url, "_blank")
   }
 
   if (selSubj) return (
@@ -306,60 +257,35 @@ function Hdr({ title, sub, onBack }) {
 }
 
 function Spinner() {
-  return (
-    <div style={{ width:28, height:28,
-      border:"2.5px solid rgba(255,255,255,0.08)",
-      borderTop:"2.5px solid #6366f1",
-      borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
-  )
+  return <div style={{ width:28, height:28, border:"2.5px solid rgba(255,255,255,0.08)", borderTop:"2.5px solid #6366f1", borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
 }
 
-// ── Стили ─────────────────────────────────────────────────────────
-
 const s = {
-  root: { minHeight:"100vh", background:"#0a0f1e", display:"flex", flexDirection:"column",
-          fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
-  header: { position:"relative", overflow:"hidden", display:"flex", alignItems:"center", gap:12,
-            padding:"20px 20px 18px", background:"linear-gradient(160deg,#131929 0%,#0a0f1e 100%)",
-            borderBottom:"1px solid rgba(255,255,255,0.05)" },
-  backBtn: { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)",
-             borderRadius:10, color:"#f1f5f9", padding:"7px 9px", cursor:"pointer",
-             display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
+  root: { minHeight:"100vh", background:"#0a0f1e", display:"flex", flexDirection:"column", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
+  header: { position:"relative", overflow:"hidden", display:"flex", alignItems:"center", gap:12, padding:"20px 20px 18px", background:"linear-gradient(160deg,#131929 0%,#0a0f1e 100%)", borderBottom:"1px solid rgba(255,255,255,0.05)" },
+  backBtn: { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#f1f5f9", padding:"7px 9px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
   hinfo: { display:"flex", flexDirection:"column", gap:2 },
   htitle: { fontSize:18, fontWeight:600, color:"#f1f5f9" },
   hsub:   { fontSize:12, color:"rgba(255,255,255,0.35)" },
   body: { display:"flex", flexDirection:"column", gap:10, padding:"16px" },
-  navCard: { display:"flex", alignItems:"center", gap:14, border:"1px solid rgba(255,255,255,0.07)",
-             borderRadius:16, padding:"14px 16px", cursor:"pointer", textAlign:"left",
-             width:"100%", boxSizing:"border-box",
-             transition:"transform 0.12s,border-color 0.12s,background 0.12s" },
-  iconWrap: { width:44, height:44, borderRadius:12, display:"flex",
-              alignItems:"center", justifyContent:"center", flexShrink:0 },
+  navCard: { display:"flex", alignItems:"center", gap:14, border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"14px 16px", cursor:"pointer", textAlign:"left", width:"100%", boxSizing:"border-box", transition:"transform 0.12s,border-color 0.12s,background 0.12s" },
+  iconWrap: { width:44, height:44, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
   cardBody: { flex:1, display:"flex", flexDirection:"column", gap:2 },
   cardLabel: { fontSize:15, fontWeight:600, color:"#f1f5f9" },
   cardDesc:  { fontSize:12, color:"rgba(255,255,255,0.4)" },
 }
-
 const sc = {
-  nav: { display:"flex", alignItems:"center", gap:8, padding:"14px 16px",
-         borderBottom:"1px solid rgba(255,255,255,0.05)" },
-  navBtn: { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)",
-            borderRadius:10, fontSize:16, padding:"8px 12px", cursor:"pointer" },
+  nav: { display:"flex", alignItems:"center", gap:8, padding:"14px 16px", borderBottom:"1px solid rgba(255,255,255,0.05)" },
+  navBtn: { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, fontSize:16, padding:"8px 12px", cursor:"pointer" },
   navCenter: { flex:1, display:"flex", flexDirection:"column", alignItems:"center", cursor:"pointer" },
   navDay:  { fontSize:15, fontWeight:700, color:"#f1f5f9" },
   navDate: { fontSize:12, color:"rgba(255,255,255,0.4)" },
-  todayBtn: { margin:"8px 16px 0", padding:"8px",
-              background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.25)",
-              borderRadius:10, color:"#818cf8", fontSize:13, fontWeight:600, cursor:"pointer" },
+  todayBtn: { margin:"8px 16px 0", padding:"8px", background:"rgba(99,102,241,0.1)", border:"1px solid rgba(99,102,241,0.25)", borderRadius:10, color:"#818cf8", fontSize:13, fontWeight:600, cursor:"pointer" },
   dateRow: { display:"flex", gap:8, padding:"10px 16px 0" },
-  dateInp: { flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)",
-             borderRadius:10, padding:"9px 12px", color:"#f1f5f9", fontSize:14, outline:"none" },
-  dateBtn: { background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)",
-             color:"#818cf8", borderRadius:10, padding:"9px 14px", fontSize:16, cursor:"pointer" },
-  swipeHint: { textAlign:"center", fontSize:11, color:"rgba(255,255,255,0.15)",
-               padding:"6px 16px 0", letterSpacing:"0.3px" },
-  card: { display:"flex", gap:12, background:"rgba(255,255,255,0.04)",
-          border:"1px solid rgba(255,255,255,0.06)", borderRadius:14, padding:"14px 16px", marginTop:10 },
+  dateInp: { flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"9px 12px", color:"#f1f5f9", fontSize:14, outline:"none" },
+  dateBtn: { background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)", color:"#818cf8", borderRadius:10, padding:"9px 14px", fontSize:16, cursor:"pointer" },
+  swipeHint: { textAlign:"center", fontSize:11, color:"rgba(255,255,255,0.15)", padding:"6px 16px 0", letterSpacing:"0.3px" },
+  card: { display:"flex", gap:12, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:14, padding:"14px 16px", marginTop:10 },
   cardLeft: { display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:44 },
   cardEmoji: { fontSize:20 },
   cardTime: { fontSize:11, color:"#6366f1", fontWeight:700, textAlign:"center", lineHeight:1.3 },
@@ -367,20 +293,14 @@ const sc = {
   cardPara: { fontSize:11, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.5px" },
   cardSubj: { fontSize:15, fontWeight:600, color:"#f1f5f9" },
   cardMeta: { fontSize:12, color:"rgba(255,255,255,0.4)" },
-  errCard: { marginTop:16, background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)",
-             borderRadius:14, padding:"16px" },
+  errCard: { marginTop:16, background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:14, padding:"16px" },
   errTitle: { fontSize:14, fontWeight:600, color:"#ef4444", marginBottom:6 },
   errText:  { fontSize:13, color:"rgba(255,255,255,0.5)", lineHeight:1.5 },
-  retryBtn: { marginTop:12, padding:"9px 16px", background:"rgba(239,68,68,0.15)",
-              border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, color:"#ef4444",
-              fontSize:13, fontWeight:600, cursor:"pointer" },
+  retryBtn: { marginTop:12, padding:"9px 16px", background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, color:"#ef4444", fontSize:13, fontWeight:600, cursor:"pointer" },
   center: { display:"flex", justifyContent:"center", paddingTop:40 },
   empty:  { textAlign:"center", color:"rgba(255,255,255,0.3)", padding:"50px 0", fontSize:15 },
 }
-
 const lc = {
-  card: { display:"flex", alignItems:"center", gap:12, background:"rgba(255,255,255,0.04)",
-          border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:"14px 16px",
-          cursor:"pointer", width:"100%", textAlign:"left", boxSizing:"border-box" },
+  card: { display:"flex", alignItems:"center", gap:12, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:"14px 16px", cursor:"pointer", width:"100%", textAlign:"left", boxSizing:"border-box" },
   name: { flex:1, fontSize:14, fontWeight:600, color:"#f1f5f9" },
 }
