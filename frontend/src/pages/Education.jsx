@@ -7,7 +7,7 @@ export default function Education({ user, goBack, initialView, initialDesmos }) 
 
   if (view === "schedule") return <Schedule user={user} goBack={() => setView("menu")} />
   if (view === "lectures") return <Lectures goBack={() => setView("menu")} />
-  if (view === "desmos")   return <Desmos   goBack={() => setView("menu")} initialCalc={initialDesmosCalc} />
+  if (view === "desmos")   return <Desmos   goBack={() => setView("menu")} initialCalc={initialDesmos} />
 
   return (
     <div style={s.root}>

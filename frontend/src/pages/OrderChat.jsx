@@ -23,7 +23,7 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
 
   const loadMessages = async () => {
     try {
-      const otherParty = isManager ? targetUserId : managerId
+      const otherParty = isManager && targetUserId ? targetUserId : managerId
     const r = await fetch(`${API}/billing/chat/messages?user_a=${user.id}&user_b=${otherParty}`)
       const d = await r.json()
       setMessages(d.messages ?? [])
@@ -38,7 +38,7 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
     try {
       await fetch(`${API}/billing/chat/send`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_id: user.id, to_id: isManager ? targetUserId : managerId, text })
+        body: JSON.stringify({ from_id: user.id, to_id: isManager && targetUserId ? targetUserId : managerId, text })
       })
       await loadMessages()
     } catch {}
