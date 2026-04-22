@@ -2,12 +2,12 @@ import { useState, useEffect, useRef } from "react"
 import { API } from "../App"
 import Desmos from "./Desmos"
 
-export default function Education({ user, goBack, initialView }) {
+export default function Education({ user, goBack, initialView, initialDesmos }) {
   const [view, setView] = useState(initialView ?? "menu")
 
   if (view === "schedule") return <Schedule user={user} goBack={() => setView("menu")} />
   if (view === "lectures") return <Lectures goBack={() => setView("menu")} />
-  if (view === "desmos")   return <Desmos   goBack={() => setView("menu")} />
+  if (view === "desmos")   return <Desmos   goBack={() => setView("menu")} initialCalc={initialDesmosCalc} />
 
   return (
     <div style={s.root}>

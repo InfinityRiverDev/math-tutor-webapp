@@ -1,366 +1,264 @@
-import { useState, useEffect, useRef } from "react"
-import { API } from "../App"
+import { useState } from "react"
 
 export default function Focus({ goBack }) {
-  const [view, setView] = useState("menu") // menu | pomodoro | music
+  const [view, setView] = useState("menu")
 
-  if (view === "pomodoro") return <Pomodoro goBack={() => setView("menu")} />
-  if (view === "music")    return <Music    goBack={() => setView("menu")} />
+  if (view === "pomodoro") return <PomodoroView goBack={() => setView("menu")} />
+  if (view === "todo")     return <TodoView     goBack={() => setView("menu")} />
+  if (view === "music")    return <MusicView    goBack={() => setView("menu")} />
 
   return (
     <div style={s.root}>
       <div style={s.header}>
-        <button style={s.backBtn} onClick={goBack}>
+        <button style={s.back} onClick={goBack}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-        <div>
-          <div style={s.headerTitle}>🎯 Фокус</div>
-          <div style={s.headerSub}>Помодоро и музыка</div>
+        <div style={s.hinfo}>
+          <span style={s.htitle}>🎯 Фокус</span>
+          <span style={s.hsub}>Продуктивность и отдых</span>
         </div>
       </div>
       <div style={s.body}>
-        <NavCard icon="🍅" title="Таймер Помодоро" desc="25 мин работы · 5 мин отдыха"
-          color="#ef4444" glow="rgba(239,68,68,0.15)" onClick={() => setView("pomodoro")} />
-        <NavCard icon="🎵" title="Музыка" desc="Поиск и скачивание треков через бота"
-          color="#8b5cf6" glow="rgba(139,92,246,0.15)" onClick={() => setView("music")} />
+        <NavCard icon="🍅" title="Помодоро" desc="Таймер для продуктивной работы" color="#ef4444" glow="rgba(239,68,68,0.15)" onClick={() => setView("pomodoro")} />
+        <NavCard icon="✅" title="To-Do список" desc="Управление задачами" color="#10b981" glow="rgba(16,185,129,0.15)" onClick={() => setView("todo")} />
+        <NavCard icon="🎧" title="Музыка" desc="Поиск и скачивание треков" color="#8b5cf6" glow="rgba(139,92,246,0.15)" onClick={() => setView("music")} />
       </div>
     </div>
   )
 }
 
-// ── Помодоро ────────────────────────────────────────────────────
+function NavCard({ icon, title, desc, color, glow, onClick }) {
+  const [p, setP] = useState(false)
+  return (
+    <button style={{ ...nc.card, borderColor: p ? color : "rgba(255,255,255,0.07)", background: p ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.04)", transform: p ? "scale(0.97)" : "scale(1)" }}
+      onPointerDown={() => setP(true)} onPointerUp={() => { setP(false); onClick() }} onPointerLeave={() => setP(false)}>
+      <div style={{ ...nc.icon, background: glow }}><span style={{ fontSize: 22 }}>{icon}</span></div>
+      <div style={nc.body}><span style={nc.title}>{title}</span><span style={nc.desc}>{desc}</span></div>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    </button>
+  )
+}
 
-const PRESETS = [
-  { label: "25/5",  work: 25*60, shortBreak: 5*60,  longBreak: 15*60, cycles: 4 },
-  { label: "50/10", work: 50*60, shortBreak: 10*60, longBreak: 20*60, cycles: 4 },
-  { label: "15/3",  work: 15*60, shortBreak: 3*60,  longBreak: 10*60, cycles: 4 },
-]
+// ── Помодоро ──────────────────────────────────────────────────────
 
-function Pomodoro({ goBack }) {
-  const [preset,       setPreset]       = useState(0)
-  const [phase,        setPhase]        = useState("idle")   // idle | work | shortBreak | longBreak | done
-  const [timeLeft,     setTimeLeft]     = useState(PRESETS[0].work)
-  const [cycle,        setCycle]        = useState(0)        // завершённых рабочих циклов
-  const [totalCycles,  setTotalCycles]  = useState(4)
-  const [running,      setRunning]      = useState(false)
-  const intervalRef = useRef(null)
+function PomodoroView({ goBack }) {
+  const [mode,     setMode]     = useState("idle")   // idle | work | break
+  const [seconds,  setSeconds]  = useState(25 * 60)
+  const [cycles,   setCycles]   = useState(0)
+  const [workMin,  setWorkMin]  = useState(25)
+  const [breakMin, setBreakMin] = useState(5)
+  const [timer,    setTimer]    = useState(null)
 
-  const cfg = PRESETS[preset]
-
-  useEffect(() => {
-    if (running && timeLeft > 0) {
-      intervalRef.current = setInterval(() => setTimeLeft(t => t - 1), 1000)
-    } else if (running && timeLeft === 0) {
-      handlePhaseEnd()
-    }
-    return () => clearInterval(intervalRef.current)
-  }, [running, timeLeft])
-
-  const handlePhaseEnd = () => {
-    clearInterval(intervalRef.current)
-    if (phase === "work") {
-      const newCycle = cycle + 1
-      setCycle(newCycle)
-      if (newCycle >= totalCycles) {
-        setPhase("longBreak")
-        setTimeLeft(cfg.longBreak)
-      } else {
-        setPhase("shortBreak")
-        setTimeLeft(cfg.shortBreak)
-      }
-    } else if (phase === "shortBreak") {
-      setPhase("work")
-      setTimeLeft(cfg.work)
-    } else if (phase === "longBreak") {
-      setPhase("done")
-      setRunning(false)
-      setCycle(0)
-    }
+  const start = () => {
+    if (timer) return
+    setMode("work")
+    setSeconds(workMin * 60)
+    const t = setInterval(() => {
+      setSeconds(prev => {
+        if (prev <= 1) {
+          clearInterval(t)
+          setTimer(null)
+          setCycles(c => c + 1)
+          setMode("break")
+          setSeconds(breakMin * 60)
+          setTimeout(() => startBreakTimer(), 100)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    setTimer(t)
   }
 
-  const start = () => { setPhase("work"); setTimeLeft(cfg.work); setRunning(true); setCycle(0) }
-  const pause = () => setRunning(false)
-  const resume = () => setRunning(true)
-  const stop = () => { setRunning(false); setPhase("idle"); setTimeLeft(cfg.work); setCycle(0); clearInterval(intervalRef.current) }
-  const skipBreak = () => { setPhase("work"); setTimeLeft(cfg.work) }
+  const startBreakTimer = () => {
+    const t = setInterval(() => {
+      setSeconds(prev => {
+        if (prev <= 1) {
+          clearInterval(t)
+          setTimer(null)
+          setMode("idle")
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    setTimer(t)
+  }
 
-  const fmt = (s) => `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`
+  const stop = () => {
+    if (timer) { clearInterval(timer); setTimer(null) }
+    setMode("idle"); setSeconds(workMin * 60)
+  }
 
-  const progress = phase === "work"        ? 1 - timeLeft / cfg.work
-                 : phase === "shortBreak"  ? 1 - timeLeft / cfg.shortBreak
-                 : phase === "longBreak"   ? 1 - timeLeft / cfg.longBreak
-                 : 0
-
-  const phaseColor = phase === "work" ? "#ef4444" : phase === "done" ? "#10b981" : "#3b82f6"
-  const phaseLabel = phase === "idle"        ? "Готов к работе"
-                   : phase === "work"        ? "🎯 Рабочий интервал"
-                   : phase === "shortBreak"  ? "☕ Короткий перерыв"
-                   : phase === "longBreak"   ? "🛋 Длинный перерыв"
-                   : "✅ Сессия завершена!"
-
-  const circumference = 2 * Math.PI * 54
-  const strokeDash    = circumference * (1 - progress)
+  const mm = String(Math.floor(seconds / 60)).padStart(2, "0")
+  const ss = String(seconds % 60).padStart(2, "0")
+  const color = mode === "work" ? "#ef4444" : mode === "break" ? "#10b981" : "#6366f1"
 
   return (
     <div style={s.root}>
       <div style={s.header}>
-        <button style={s.backBtn} onClick={goBack}>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-        <div>
-          <div style={s.headerTitle}>🍅 Помодоро</div>
-          <div style={s.headerSub}>{phaseLabel}</div>
-        </div>
+        <button style={s.back} onClick={goBack}><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+        <div style={s.hinfo}><span style={s.htitle}>🍅 Помодоро</span><span style={s.hsub}>Циклов: {cycles}</span></div>
       </div>
-
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"32px 16px 24px", gap:24 }}>
-        {/* Круговой таймер */}
-        <div style={{ position:"relative", width:140, height:140 }}>
-          <svg width="140" height="140" style={{ transform:"rotate(-90deg)" }}>
-            <circle cx="70" cy="70" r="54" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8"/>
-            <circle cx="70" cy="70" r="54" fill="none" stroke={phaseColor} strokeWidth="8"
-              strokeDasharray={circumference} strokeDashoffset={strokeDash}
-              strokeLinecap="round" style={{ transition:"stroke-dashoffset 1s linear" }}/>
-          </svg>
-          <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-            <span style={{ fontSize:28, fontWeight:800, color:"#f1f5f9", fontFamily:"monospace" }}>{fmt(timeLeft)}</span>
-            <span style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>
-              {phase === "work" ? `цикл ${cycle+1}/${totalCycles}` : phase}
-            </span>
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"40px 20px", gap:28 }}>
+        <div style={{ width:200, height:200, borderRadius:"50%", border: `6px solid ${color}`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background: color + "14" }}>
+          <div style={{ fontSize:48, fontWeight:800, color:"#f1f5f9", letterSpacing:-2 }}>{mm}:{ss}</div>
+          <div style={{ fontSize:13, color:"rgba(255,255,255,0.4)", marginTop:4 }}>
+            {mode === "idle" ? "Готов" : mode === "work" ? "🍅 Работа" : "☕ Перерыв"}
           </div>
         </div>
-
-        {/* Пресеты (только в idle) */}
-        {phase === "idle" && (
-          <div style={{ display:"flex", gap:8 }}>
-            {PRESETS.map((p, i) => (
-              <button key={i} style={{
-                padding:"8px 16px", borderRadius:10, fontSize:13, fontWeight:600, cursor:"pointer",
-                background: preset === i ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.06)",
-                border: preset === i ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(255,255,255,0.08)",
-                color: preset === i ? "#ef4444" : "rgba(255,255,255,0.6)",
-              }} onClick={() => { setPreset(i); setTimeLeft(PRESETS[i].work) }}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Кнопки управления */}
         <div style={{ display:"flex", gap:12 }}>
-          {phase === "idle" && (
-            <button style={{ ...pb.btn, background:"linear-gradient(135deg,#ef4444,#dc2626)" }} onClick={start}>
-              ▶ Старт
-            </button>
-          )}
-          {(phase === "work" || phase === "shortBreak" || phase === "longBreak") && running && (
-            <button style={{ ...pb.btn, background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.15)" }} onClick={pause}>
-              ⏸ Пауза
-            </button>
-          )}
-          {(phase === "work" || phase === "shortBreak" || phase === "longBreak") && !running && (
-            <button style={{ ...pb.btn, background:"linear-gradient(135deg,#ef4444,#dc2626)" }} onClick={resume}>
-              ▶ Продолжить
-            </button>
-          )}
-          {(phase === "shortBreak" || phase === "longBreak") && (
-            <button style={{ ...pb.btn, background:"rgba(59,130,246,0.2)", border:"1px solid rgba(59,130,246,0.3)", color:"#60a5fa" }} onClick={skipBreak}>
-              ⏭ Пропустить
-            </button>
-          )}
-          {phase !== "idle" && (
-            <button style={{ ...pb.btn, background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", color:"#ef4444" }} onClick={stop}>
-              ⏹ Стоп
-            </button>
-          )}
-          {phase === "done" && (
-            <button style={{ ...pb.btn, background:"linear-gradient(135deg,#ef4444,#dc2626)" }} onClick={start}>
-              🔄 Новый сеанс
-            </button>
-          )}
+          {mode === "idle"
+            ? <button style={{ ...pom.btn, background: color }} onClick={start}>▶ Старт</button>
+            : <button style={{ ...pom.btn, background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)" }} onClick={stop}>⏹ Стоп</button>
+          }
         </div>
-
-        {/* Прогресс циклов */}
-        {phase !== "idle" && (
-          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            {Array.from({length: totalCycles}).map((_, i) => (
-              <div key={i} style={{
-                width:10, height:10, borderRadius:"50%",
-                background: i < cycle ? "#10b981" : i === cycle && phase === "work" ? "#ef4444" : "rgba(255,255,255,0.15)"
-              }} />
-            ))}
-          </div>
-        )}
-
-        {/* Советы */}
-        {phase === "work" && (
-          <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.15)", borderRadius:14, padding:"12px 16px", width:"100%", boxSizing:"border-box" }}>
-            <div style={{ fontSize:13, color:"rgba(255,255,255,0.5)", lineHeight:1.6 }}>
-              💡 <b style={{color:"#f1f5f9"}}>Совет:</b> Уберите телефон, закройте соцсети. Сосредоточьтесь на одной задаче.
-            </div>
-          </div>
-        )}
+        <div style={{ display:"flex", gap:16, fontSize:13, color:"rgba(255,255,255,0.4)" }}>
+          <div>Работа: <b style={{color:"#f1f5f9"}}>{workMin} мин</b></div>
+          <div>Перерыв: <b style={{color:"#f1f5f9"}}>{breakMin} мин</b></div>
+        </div>
       </div>
     </div>
   )
 }
 
-// ── Музыка ──────────────────────────────────────────────────────
+const pom = {
+  btn: { padding:"14px 32px", border:"none", borderRadius:14, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer" }
+}
 
-function Music({ goBack }) {
+// ── To-Do ─────────────────────────────────────────────────────────
+
+function TodoView({ goBack }) {
+  const [tasks,   setTasks]   = useState([])
+  const [input,   setInput]   = useState("")
+  const [priority, setPriority] = useState(2)
+
+  const add = () => {
+    if (!input.trim()) return
+    setTasks(prev => [...prev, { id: Date.now(), text: input.trim(), done: false, priority }])
+    setInput("")
+  }
+
+  const toggle = (id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t))
+  const remove = (id) => setTasks(prev => prev.filter(t => t.id !== id))
+
+  const PRIO = { 1: { label:"🟢", color:"#10b981" }, 2: { label:"🟡", color:"#f59e0b" }, 3: { label:"🔴", color:"#ef4444" } }
+  const sorted = [...tasks].sort((a,b) => b.priority - a.priority)
+  const done = tasks.filter(t => t.done).length
+
+  return (
+    <div style={s.root}>
+      <div style={s.header}>
+        <button style={s.back} onClick={goBack}><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+        <div style={s.hinfo}><span style={s.htitle}>✅ To-Do</span><span style={s.hsub}>{done}/{tasks.length} выполнено</span></div>
+      </div>
+      <div style={{ padding:16 }}>
+        <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+          <input value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && add()}
+            placeholder="Новая задача..." style={td.input} />
+          <button style={{ ...td.pBtn, background: PRIO[priority].color + "22", borderColor: PRIO[priority].color + "66" }}
+            onClick={() => setPriority(p => p % 3 + 1)}>{PRIO[priority].label}</button>
+          <button style={td.addBtn} onClick={add}>+</button>
+        </div>
+        {sorted.length === 0 && <div style={{ textAlign:"center", color:"rgba(255,255,255,0.3)", padding:"40px 0" }}>Задач пока нет</div>}
+        {sorted.map(t => (
+          <div key={t.id} style={{ ...td.task, opacity: t.done ? 0.5 : 1 }}>
+            <button style={{ ...td.check, borderColor: t.done ? "#10b981" : "rgba(255,255,255,0.3)", background: t.done ? "#10b981" : "transparent" }} onClick={() => toggle(t.id)}>
+              {t.done && "✓"}
+            </button>
+            <span style={{ flex:1, fontSize:14, color:"#f1f5f9", textDecoration: t.done ? "line-through" : "none", textDecorationColor:"rgba(255,255,255,0.3)" }}>{t.text}</span>
+            <span style={{ fontSize:14 }}>{PRIO[t.priority].label}</span>
+            <button style={td.del} onClick={() => remove(t.id)}>✕</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const td = {
+  input:  { flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:"11px 14px", color:"#f1f5f9", fontSize:14, outline:"none", fontFamily:"inherit" },
+  pBtn:   { width:42, height:42, border:"1px solid", borderRadius:12, cursor:"pointer", fontSize:16, flexShrink:0 },
+  addBtn: { width:42, height:42, background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.3)", borderRadius:12, color:"#818cf8", fontSize:22, cursor:"pointer", flexShrink:0 },
+  task:   { display:"flex", alignItems:"center", gap:10, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:"12px 14px", marginBottom:8 },
+  check:  { width:22, height:22, borderRadius:6, border:"1.5px solid", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, color:"#fff" },
+  del:    { background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:14, cursor:"pointer", padding:4 },
+}
+
+// ── Музыка ────────────────────────────────────────────────────────
+
+function MusicView({ goBack }) {
   const [query,   setQuery]   = useState("")
+  const [status,  setStatus]  = useState(null)
   const [loading, setLoading] = useState(false)
-  const [result,  setResult]  = useState(null) // {ok, message}
+  const API_URL = "https://math-tutor-webapp.onrender.com"
 
-  // Музыка работает через бота — миниапп отправляет запрос,
-  // бот скачивает трек и присылает пользователю в Telegram
   const search = async () => {
     if (!query.trim() || loading) return
     setLoading(true)
-    setResult(null)
+    setStatus(null)
     try {
-      const r = await fetch(`${API}/music/search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim() })
+      const res  = await fetch(`${API_URL}/music/search`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: query.trim(), user_id: 0 })
       })
-      const d = await r.json()
-      setResult(d)
+      const data = await res.json()
+      setStatus(data.ok ? { ok: true,  msg: data.message } : { ok: false, msg: data.message })
     } catch {
-      setResult({ ok: false, message: "Ошибка соединения" })
+      setStatus({ ok: false, msg: "Ошибка соединения" })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleKey = (e) => {
-    if (e.key === "Enter") search()
-  }
-
   return (
     <div style={s.root}>
       <div style={s.header}>
-        <button style={s.backBtn} onClick={goBack}>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-        <div>
-          <div style={s.headerTitle}>🎵 Музыка</div>
-          <div style={s.headerSub}>Поиск треков через бота</div>
-        </div>
+        <button style={s.back} onClick={goBack}><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+        <div style={s.hinfo}><span style={s.htitle}>🎧 Музыка</span><span style={s.hsub}>Поиск треков</span></div>
       </div>
-      <div style={{ padding:"20px 16px", display:"flex", flexDirection:"column", gap:16 }}>
-        <div style={{ background:"rgba(139,92,246,0.08)", border:"1px solid rgba(139,92,246,0.2)", borderRadius:14, padding:"14px 16px" }}>
-          <div style={{ fontSize:13, color:"rgba(255,255,255,0.5)", lineHeight:1.6 }}>
-            🎧 Введи название трека или исполнителя. Бот скачает и пришлёт аудиофайл прямо в Telegram.
-          </div>
+      <div style={{ padding:16, display:"flex", flexDirection:"column", gap:14 }}>
+        <div style={{ background:"rgba(139,92,246,0.08)", border:"1px solid rgba(139,92,246,0.2)", borderRadius:14, padding:"14px 16px", fontSize:13, color:"rgba(255,255,255,0.5)", lineHeight:1.55 }}>
+          🎵 Введите название трека или исполнителя — бот найдёт и отправит аудио в Telegram
         </div>
-
-        <div style={{ display:"flex", gap:10 }}>
-          <input
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder="Например: Imagine Dragons Believer"
-            style={{
-              flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)",
-              borderRadius:14, padding:"13px 16px", color:"#f1f5f9", fontSize:15, outline:"none",
-              fontFamily:"inherit"
-            }}
-          />
-          <button
-            onClick={search}
-            disabled={!query.trim() || loading}
-            style={{
-              padding:"13px 18px", background:"linear-gradient(135deg,#8b5cf6,#7c3aed)",
-              border:"none", borderRadius:14, color:"#fff", fontSize:15, fontWeight:700,
-              cursor: !query.trim() || loading ? "not-allowed" : "pointer",
-              opacity: !query.trim() || loading ? 0.5 : 1,
-              flexShrink:0
-            }}
-          >
+        <div style={{ display:"flex", gap:8 }}>
+          <input value={query} onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && search()}
+            placeholder="Исполнитель — Название трека"
+            style={{ flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:"12px 14px", color:"#f1f5f9", fontSize:14.5, outline:"none", fontFamily:"inherit" }} />
+          <button style={{ width:48, height:48, background:"linear-gradient(135deg,#8b5cf6,#6366f1)", border:"none", borderRadius:12, color:"#fff", fontSize:20, cursor:"pointer", flexShrink:0 }} onClick={search}>
             {loading ? "⏳" : "🔍"}
           </button>
         </div>
-
-        {result && (
-          <div style={{
-            background: result.ok ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)",
-            border: `1px solid ${result.ok ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.25)"}`,
-            borderRadius:14, padding:"14px 16px",
-            color: result.ok ? "#10b981" : "#ef4444",
-            fontSize:14, fontWeight:600,
-          }}>
-            {result.ok ? "✅ " : "❌ "}{result.message}
+        {status && (
+          <div style={{ background: status.ok ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", border:`1px solid ${status.ok ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`, borderRadius:12, padding:"12px 14px", fontSize:14, color: status.ok ? "#10b981" : "#ef4444" }}>
+            {status.msg}
           </div>
         )}
-
-        <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:8 }}>
-          <div style={{ fontSize:12, color:"rgba(255,255,255,0.3)", textTransform:"uppercase", letterSpacing:"0.5px" }}>Популярные запросы</div>
-          {["Скриптонит незабудка", "MACAN Jet", "Coldplay Yellow", "Imagine Dragons Believer"].map(q => (
-            <button key={q} style={{
-              background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)",
-              borderRadius:12, padding:"11px 16px", color:"rgba(255,255,255,0.6)",
-              fontSize:14, cursor:"pointer", textAlign:"left"
-            }} onClick={() => setQuery(q)}>
-              🎵 {q}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   )
 }
 
-// ── Компоненты ──────────────────────────────────────────────────
-
-function NavCard({ icon, title, desc, color, glow, onClick }) {
-  const [pressed, setPressed] = useState(false)
-  return (
-    <button style={{
-      ...s.navCard,
-      borderColor: pressed ? color : "rgba(255,255,255,0.07)",
-      transform: pressed ? "scale(0.97)" : "scale(1)",
-      background: pressed ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.04)",
-    }}
-      onPointerDown={() => setPressed(true)}
-      onPointerUp={() => { setPressed(false); onClick() }}
-      onPointerLeave={() => setPressed(false)}
-    >
-      <div style={{ ...s.iconWrap, background: glow }}>
-        <span style={{ fontSize: 26 }}>{icon}</span>
-      </div>
-      <div style={{ flex:1, display:"flex", flexDirection:"column", gap:3 }}>
-        <span style={{ fontSize:16, fontWeight:600, color:"#f1f5f9" }}>{title}</span>
-        <span style={{ fontSize:13, color:"rgba(255,255,255,0.4)" }}>{desc}</span>
-      </div>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <path d="M6 4l4 4-4 4" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    </button>
-  )
-}
-
-const pb = {
-  btn: {
-    padding:"12px 20px", borderRadius:12, fontSize:15, fontWeight:700,
-    cursor:"pointer", border:"none", color:"#fff",
-    boxShadow:"0 4px 16px rgba(0,0,0,0.3)",
-  }
-}
+// ── Стили ─────────────────────────────────────────────────────────
 
 const s = {
-  root: { minHeight:"100vh", background:"#0a0f1e", display:"flex", flexDirection:"column", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
+  root:   { minHeight:"100vh", background:"#0a0f1e", display:"flex", flexDirection:"column", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
   header: { display:"flex", alignItems:"center", gap:12, padding:"20px 20px 18px", background:"linear-gradient(160deg,#131929 0%,#0a0f1e 100%)", borderBottom:"1px solid rgba(255,255,255,0.05)" },
-  backBtn: { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#f1f5f9", padding:"7px 9px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
-  headerTitle: { fontSize:18, fontWeight:600, color:"#f1f5f9" },
-  headerSub: { fontSize:12, color:"rgba(255,255,255,0.35)" },
-  body: { display:"flex", flexDirection:"column", gap:12, padding:"20px 16px" },
-  navCard: { display:"flex", alignItems:"center", gap:16, border:"1px solid rgba(255,255,255,0.07)", borderRadius:18, padding:"18px 16px", cursor:"pointer", transition:"transform 0.12s,border-color 0.12s,background 0.12s", textAlign:"left", width:"100%", boxSizing:"border-box" },
-  iconWrap: { width:56, height:56, borderRadius:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
+  back:   { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#f1f5f9", padding:"7px 9px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
+  hinfo:  { display:"flex", flexDirection:"column", gap:2 },
+  htitle: { fontSize:18, fontWeight:600, color:"#f1f5f9" },
+  hsub:   { fontSize:12, color:"rgba(255,255,255,0.35)" },
+  body:   { display:"flex", flexDirection:"column", gap:10, padding:"16px" },
+}
+
+const nc = {
+  card:  { display:"flex", alignItems:"center", gap:14, border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"14px 16px", cursor:"pointer", textAlign:"left", width:"100%", boxSizing:"border-box", transition:"transform 0.12s,border-color 0.12s,background 0.12s" },
+  icon:  { width:44, height:44, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
+  body:  { flex:1, display:"flex", flexDirection:"column", gap:2 },
+  title: { fontSize:15, fontWeight:600, color:"#f1f5f9" },
+  desc:  { fontSize:12, color:"rgba(255,255,255,0.4)" },
 }

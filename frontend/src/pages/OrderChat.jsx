@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { API } from "../App"
 
-export default function OrderChat({ user, managerId, goBack, prefill, chatLabel, chatIcon }) {
+export default function OrderChat({ user, managerId, goBack, prefill, chatLabel, chatIcon, isManager, targetUserId }) {
   const label = chatLabel || "Менеджер"
   const icon  = chatIcon  || "🎞️"
 
@@ -23,7 +23,8 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
 
   const loadMessages = async () => {
     try {
-      const r = await fetch(`${API}/billing/chat/messages?user_a=${user.id}&user_b=${managerId}`)
+      const otherParty = isManager ? targetUserId : managerId
+    const r = await fetch(`${API}/billing/chat/messages?user_a=${user.id}&user_b=${otherParty}`)
       const d = await r.json()
       setMessages(d.messages ?? [])
     } catch {}
@@ -37,7 +38,7 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
     try {
       await fetch(`${API}/billing/chat/send`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_id: user.id, to_id: managerId, text })
+        body: JSON.stringify({ from_id: user.id, to_id: isManager ? targetUserId : managerId, text })
       })
       await loadMessages()
     } catch {}

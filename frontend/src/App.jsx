@@ -3,18 +3,29 @@ import MainPage from "./pages/MainPage"
 import "./App.css"
 
 export const API              = "https://math-tutor-webapp.onrender.com"
-export const MANAGER_ID       = 858414038     // менеджер презентаций
-export const PRINT_MANAGER_ID = 1991833177   // менеджер распечаток (он же админ)
+export const MANAGER_ID       = 858414038
+export const PRINT_MANAGER_ID = 1991833177
+export const ADMIN_IDS        = [1991833177, 808603029, 1114949712, 8506118978]
+export const MANAGER_IDS      = [MANAGER_ID, PRINT_MANAGER_ID]
 
-// Все четыре админа
-export const ADMIN_IDS  = [1991833177, 808603029, 1114949712, 8506118978]
-
-// Менеджеры у которых есть вкладка «Заказы»
-export const MANAGER_IDS = [MANAGER_ID, PRINT_MANAGER_ID]
+// Читаем параметры из URL (для deeplink из бота)
+function getUrlParams() {
+  try {
+    const search = window.location.search
+    const params = new URLSearchParams(search)
+    return {
+      desmos:   params.get("desmos"),      // graphing | scientific | arithmetic | geometry | 3d
+      page:     params.get("page"),        // education | wallet | tutor | etc
+    }
+  } catch {
+    return {}
+  }
+}
 
 export default function App() {
   const [user,         setUser]         = useState(null)
   const [subscription, setSubscription] = useState(null)
+  const [startParams,  setStartParams]  = useState({})
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
@@ -23,9 +34,11 @@ export default function App() {
       tg.expand()
       setUser(tg.initDataUnsafe.user)
     } else {
-      // В режиме разработки — тестовый пользователь
       setUser({ id: 123, first_name: "TestUser", username: "test" })
     }
+
+    // Читаем URL-параметры (для deeplink из бота)
+    setStartParams(getUrlParams())
   }, [])
 
   useEffect(() => {
@@ -69,7 +82,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <MainPage user={user} subscription={subscription} reloadSub={loadSubscription} />
+      <MainPage
+        user={user}
+        subscription={subscription}
+        reloadSub={loadSubscription}
+        startParams={startParams}
+      />
     </div>
   )
 }
