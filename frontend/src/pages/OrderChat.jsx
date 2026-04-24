@@ -12,13 +12,28 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
   const chatRef                   = useRef()
   const pollRef                   = useRef()
 
-  // Определяем ID собеседника ПРАВИЛЬНО
-  const otherParty = isManager && targetUserId ? targetUserId : managerId
+  // ✅ ИСПРАВЛЕНО: определяем otherParty ПРАВИЛЬНО
+  const otherParty = (() => {
+    if (isManager && targetUserId) {
+      return targetUserId
+    }
+    // Если managerId не передан или undefined
+    if (managerId && typeof managerId === 'number') {
+      return managerId
+    }
+    console.error("OrderChat: managerId is missing!", { isManager, targetUserId, managerId })
+    return null
+  })()
 
   useEffect(() => {
+    // Не делаем запрос если otherParty не определён
+    if (!otherParty) return
+    
     loadMessages()
     pollRef.current = setInterval(loadMessages, 4000)
-    return () => clearInterval(pollRef.current)
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
   }, [otherParty])
 
   useEffect(() => {
@@ -26,6 +41,8 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
   }, [messages])
 
   const loadMessages = async () => {
+    if (!otherParty) return
+    
     try {
       const r = await fetch(`${API}/billing/chat/messages?user_a=${user.id}&user_b=${otherParty}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -39,7 +56,7 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
 
   const send = async (textOverride) => {
     const text = (textOverride ?? input).trim()
-    if (!text || sending) return
+    if (!text || sending || !otherParty) return
     
     setSending(true)
     setError(null)
@@ -76,10 +93,10 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
       await loadMessages()
     } catch (e) {
       console.error("Chat send error:", e)
-      setError("Не удалось отправить. Попробуйте ещё раз.")
+      setError("Не удалось отправить сообщение")
       // Удаляем оптимистичное сообщение при ошибке
       setMessages(prev => prev.filter(m => m._id !== tempId))
-      setInput(text) // Возвращаем текст в поле ввода
+      setInput(text) // Возвращаем текст
     } finally {
       setSending(false)
     }
@@ -95,6 +112,28 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
   const autoResize = (e) => {
     e.target.style.height = "auto"
     e.target.style.height = Math.min(e.target.scrollHeight, 110) + "px"
+  }
+
+  // Если otherParty не определён — показываем ошибку
+  if (!otherParty) {
+    return (
+      <div style={st.root}>
+        <div style={st.header}>
+          <button style={st.back} onClick={goBack}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <div>
+            <div style={st.hname}>Ошибка</div>
+            <div style={st.hstatus}>Не удалось определить получателя</div>
+          </div>
+        </div>
+        <div style={{ padding: 20, textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+          ⚠️ Ошибка загрузки чата. Попробуйте перезапустить приложение.
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -147,6 +186,12 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
       {error && (
         <div style={st.errorBanner}>
           ⚠️ {error}
+          <button 
+            onClick={loadMessages}
+            style={{ marginLeft: 10, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}
+          >
+            Повторить
+          </button>
         </div>
       )}
 
@@ -211,7 +256,8 @@ const st = {
   time: { fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 4, textAlign: "right" },
   errorBanner: { padding: "8px 16px", background: "rgba(239,68,68,0.1)", 
                  borderTop: "1px solid rgba(239,68,68,0.2)",
-                 fontSize: 12, color: "#ef4444", textAlign: "center" },
+                 fontSize: 12, color: "#ef4444", textAlign: "center",
+                 display: "flex", alignItems: "center", justifyContent: "center" },
   inputArea: { background: "rgba(13,19,35,0.98)", padding: "10px 12px",
                display: "flex", alignItems: "flex-end", gap: 8,
                borderTop: "1px solid rgba(255,255,255,0.05)" },
