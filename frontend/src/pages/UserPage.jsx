@@ -8,7 +8,6 @@ import Focus      from "./Focus"
 import OrderChat  from "./OrderChat"
 import StatsView  from "./StatsView"
 
-// Шаблоны презентаций
 const PRESENTATION_TEMPLATES = [
   { id: "minimalism", name: "Минимализм",  desc: "Чистый и аккуратный стиль",         emoji: "⬜", color: "rgba(148,163,184,0.2)" },
   { id: "corporate",  name: "Корпоратив",  desc: "Строгий деловой стиль",             emoji: "🏢", color: "rgba(59,130,246,0.2)"  },
@@ -17,9 +16,18 @@ const PRESENTATION_TEMPLATES = [
   { id: "gradient",   name: "Градиент",    desc: "Плавные переходы цветов",           emoji: "🌈", color: "linear-gradient(135deg,rgba(99,102,241,0.3),rgba(236,72,153,0.3))" },
 ]
 
+// ✅ Конфигурация чатов прямо здесь (с гарантированными ID)
 const CHAT_CONFIGS = {
-  presentation: { managerId: MANAGER_ID,       icon: "🎞️", label: "Презентации" },
-  print:        { managerId: PRINT_MANAGER_ID, icon: "🖨️", label: "Распечатка"  },
+  presentation: { 
+    managerId: MANAGER_ID,       
+    icon: "🎞️", 
+    label: "Презентации" 
+  },
+  print: { 
+    managerId: PRINT_MANAGER_ID, 
+    icon: "🖨️", 
+    label: "Распечатка"  
+  },
 }
 
 const ITEMS = [
@@ -56,6 +64,7 @@ export default function UserPage({ user, subscription, reloadSub, startParams })
   }
 
   const openChat = (type, msg = null) => {
+    console.log("🟢 openChat called:", { type, msg })
     setChatType(type)
     setPrefill(msg)
     setPage("order_chat")
@@ -77,30 +86,44 @@ export default function UserPage({ user, subscription, reloadSub, startParams })
   if (page === "services")
     return <ServicesPage user={user} goBack={() => setPage("home")} onOpenChat={openChat} />
 
-  // ✅ ИСПРАВЛЕНО: передаём managerId из конфига
+  // ✅ ИСПРАВЛЕНО: передаём КОНКРЕТНЫЙ managerId
   if (page === "order_chat" && chatType) {
     const cfg = CHAT_CONFIGS[chatType]
-    if (!cfg) {
-      console.error(`No config for chatType: ${chatType}`)
+    console.log("🟢 Rendering OrderChat with cfg:", cfg)
+    
+    if (!cfg || !cfg.managerId) {
+      console.error("❌ No config for chatType:", chatType)
       return (
-        <div style={s.root}>
-          <div style={s.header}>
-            <button style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,color:"#f1f5f9",padding:"7px 9px",cursor:"pointer"}} onClick={() => setPage("home")}>
+        <div style={{ minHeight: "100vh", background: "#0a0f1e", display: "flex", flexDirection: "column", fontFamily: "system-ui" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "20px", background: "linear-gradient(160deg,#131929,#0a0f1e)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <button onClick={() => { setChatType(null); setPage("services") }} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#f1f5f9", padding: "7px 9px", cursor: "pointer" }}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
-            <span style={{color:"#f1f5f9",fontSize:16,fontWeight:600}}>Ошибка: чат не найден</span>
+            <span style={{ color: "#f1f5f9", fontSize: 16, fontWeight: 600 }}>Ошибка: чат не найден</span>
+          </div>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.4)", fontSize: 14 }}>
+            Не удалось открыть чат. Попробуйте позже.
           </div>
         </div>
       )
     }
+    
+    // ✅ Передаём managerId ПРЯМО из конфига
     return (
       <OrderChat
         user={user}
-        managerId={cfg.managerId}
+        managerId={cfg.managerId}     // ← ГАРАНТИРОВАННО число
         chatLabel={cfg.label}
         chatIcon={cfg.icon}
         prefill={prefill}
-        goBack={() => { setPage("services"); setPrefill(null); setChatType(null) }}
+        isManager={false}
+        targetUserId={null}
+        goBack={() => { 
+          console.log("🟢 Going back from chat")
+          setPage("services"); 
+          setPrefill(null); 
+          setChatType(null) 
+        }}
       />
     )
   }
@@ -179,12 +202,11 @@ function ServicesPage({ user, goBack, onOpenChat }) {
       setLoading(true)
       const results = await Promise.all(
         Object.entries(CHAT_CONFIGS).map(async ([type, cfg]) => {
-          // Проверяем что managerId существует
           if (!cfg?.managerId) return { type, cfg, lastMsg: null }
           try {
-            const r    = await fetch(`${API}/billing/chat/messages?user_a=${user.id}&user_b=${cfg.managerId}`)
+            const r = await fetch(`${API}/billing/chat/messages?user_a=${user.id}&user_b=${cfg.managerId}`)
             if (!r.ok) return { type, cfg, lastMsg: null }
-            const d    = await r.json()
+            const d = await r.json()
             const msgs = d.messages ?? []
             return { type, cfg, lastMsg: msgs[msgs.length - 1] ?? null }
           } catch {
@@ -244,7 +266,10 @@ function ServicesPage({ user, goBack, onOpenChat }) {
               📋 Шаблоны
             </button>
             <button style={{ ...sv.btn, flex: 1, color: "#818cf8", borderColor: "rgba(99,102,241,0.3)" }}
-              onClick={() => onOpenChat("presentation")}>
+              onClick={() => {
+                console.log("🟢 Opening presentation chat")
+                onOpenChat("presentation")
+              }}>
               💬 Написать
             </button>
           </div>
@@ -265,7 +290,10 @@ function ServicesPage({ user, goBack, onOpenChat }) {
             </div>
           </div>
           <button style={{ ...sv.btn, color: "#10b981", borderColor: "rgba(16,185,129,0.3)" }}
-            onClick={() => onOpenChat("print")}>
+            onClick={() => {
+              console.log("🟢 Opening print chat")
+              onOpenChat("print")
+            }}>
             💬 Написать менеджеру
           </button>
         </div>
@@ -273,8 +301,6 @@ function ServicesPage({ user, goBack, onOpenChat }) {
     </div>
   )
 }
-
-// ── Шаблоны презентаций ────────────────────────────────────────────
 
 function PresentationTemplates({ goBack, onSelect }) {
   return (
@@ -318,8 +344,6 @@ function PresentationTemplates({ goBack, onSelect }) {
     </div>
   )
 }
-
-// ── Стили ─────────────────────────────────────────────────────────
 
 const s = {
   root:   { minHeight:"100vh", background:"#0a0f1e", display:"flex", flexDirection:"column", padding:"0 0 32px", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
