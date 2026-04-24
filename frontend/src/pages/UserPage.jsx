@@ -33,7 +33,6 @@ const ITEMS = [
 ]
 
 export default function UserPage({ user, subscription, reloadSub, startParams }) {
-  // Определяем начальную страницу из deeplink (параметры URL из бота)
   const getInitialPage = () => {
     if (startParams?.desmos) return "education"
     if (startParams?.page)   return startParams.page
@@ -57,7 +56,9 @@ export default function UserPage({ user, subscription, reloadSub, startParams })
   }
 
   const openChat = (type, msg = null) => {
-    setChatType(type); setPrefill(msg); setPage("order_chat")
+    setChatType(type)
+    setPrefill(msg)
+    setPage("order_chat")
   }
 
   // Рендер страниц
@@ -76,8 +77,22 @@ export default function UserPage({ user, subscription, reloadSub, startParams })
   if (page === "services")
     return <ServicesPage user={user} goBack={() => setPage("home")} onOpenChat={openChat} />
 
-  if (page === "order_chat") {
-    const cfg = CHAT_CONFIGS[chatType] ?? CHAT_CONFIGS.presentation
+  // ✅ ИСПРАВЛЕНО: передаём managerId из конфига
+  if (page === "order_chat" && chatType) {
+    const cfg = CHAT_CONFIGS[chatType]
+    if (!cfg) {
+      console.error(`No config for chatType: ${chatType}`)
+      return (
+        <div style={s.root}>
+          <div style={s.header}>
+            <button style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,color:"#f1f5f9",padding:"7px 9px",cursor:"pointer"}} onClick={() => setPage("home")}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <span style={{color:"#f1f5f9",fontSize:16,fontWeight:600}}>Ошибка: чат не найден</span>
+          </div>
+        </div>
+      )
+    }
     return (
       <OrderChat
         user={user}
@@ -85,7 +100,7 @@ export default function UserPage({ user, subscription, reloadSub, startParams })
         chatLabel={cfg.label}
         chatIcon={cfg.icon}
         prefill={prefill}
-        goBack={() => { setPage("services"); setPrefill(null) }}
+        goBack={() => { setPage("services"); setPrefill(null); setChatType(null) }}
       />
     )
   }
@@ -155,7 +170,7 @@ export default function UserPage({ user, subscription, reloadSub, startParams })
 // ── Страница Услуг ────────────────────────────────────────────────
 
 function ServicesPage({ user, goBack, onOpenChat }) {
-  const [view,    setView]    = useState("main") // main | templates
+  const [view,    setView]    = useState("main")
   const [chats,   setChats]   = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -164,8 +179,11 @@ function ServicesPage({ user, goBack, onOpenChat }) {
       setLoading(true)
       const results = await Promise.all(
         Object.entries(CHAT_CONFIGS).map(async ([type, cfg]) => {
+          // Проверяем что managerId существует
+          if (!cfg?.managerId) return { type, cfg, lastMsg: null }
           try {
             const r    = await fetch(`${API}/billing/chat/messages?user_a=${user.id}&user_b=${cfg.managerId}`)
+            if (!r.ok) return { type, cfg, lastMsg: null }
             const d    = await r.json()
             const msgs = d.messages ?? []
             return { type, cfg, lastMsg: msgs[msgs.length - 1] ?? null }
