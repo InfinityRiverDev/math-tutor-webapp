@@ -5,7 +5,7 @@ import "./App.css"
 export const API              = "https://math-tutor-webapp.onrender.com"
 export const MANAGER_ID       = 858414038
 export const PRINT_MANAGER_ID = 1991833177
-export const ADMIN_IDS        = [1991833177, 808603029, 1114949712, 8506118978]
+export const ADMIN_IDS        = [1991833177, 808603029, 1114949712]
 export const MANAGER_IDS      = [MANAGER_ID, PRINT_MANAGER_ID]
 
 // Читаем параметры из URL (для deeplink из бота)
