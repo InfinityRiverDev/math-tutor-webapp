@@ -2,6 +2,17 @@ import { useState, useEffect, useRef } from "react"
 import { API } from "../App"
 
 export default function OrderChat({ user, managerId, goBack, prefill, chatLabel, chatIcon, isManager, targetUserId }) {
+  // ✅ ДИАГНОСТИКА: выводим все пропсы в консоль
+  console.log("🔍 OrderChat mounted with:", {
+    userId: user?.id,
+    managerId,
+    isManager,
+    targetUserId,
+    chatLabel,
+    hasUser: !!user,
+    hasManagerId: !!managerId
+  })
+
   const label = chatLabel || "Менеджер"
   const icon  = chatIcon  || "🎞️"
 
@@ -9,30 +20,44 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
   const [input, setInput]         = useState(prefill || "")
   const [sending, setSending]     = useState(false)
   const [error, setError]         = useState(null)
+  const [loading, setLoading]     = useState(true)  // ✅ Добавили состояние загрузки
   const chatRef                   = useRef()
   const pollRef                   = useRef()
 
-  // ✅ ИСПРАВЛЕНО: определяем otherParty ПРАВИЛЬНО
+  // ✅ ИСПРАВЛЕНО: определяем otherParty с проверками
   const otherParty = (() => {
     if (isManager && targetUserId) {
+      console.log("✅ Using targetUserId:", targetUserId)
       return targetUserId
     }
-    // Если managerId не передан или undefined
-    if (managerId && typeof managerId === 'number') {
+    if (managerId && typeof managerId === 'number' && managerId > 0) {
+      console.log("✅ Using managerId:", managerId)
       return managerId
     }
-    console.error("OrderChat: managerId is missing!", { isManager, targetUserId, managerId })
+    console.error("❌ OrderChat: No valid otherParty!", { isManager, targetUserId, managerId })
     return null
   })()
 
   useEffect(() => {
-    // Не делаем запрос если otherParty не определён
-    if (!otherParty) return
+    if (!otherParty) {
+      setLoading(false)
+      setError("Не удалось определить получателя сообщений")
+      return
+    }
     
+    console.log("📥 Loading messages for:", { userA: user.id, userB: otherParty })
     loadMessages()
-    pollRef.current = setInterval(loadMessages, 4000)
+    
+    pollRef.current = setInterval(() => {
+      console.log("🔄 Polling messages...")
+      loadMessages()
+    }, 4000)
+    
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+      if (pollRef.current) {
+        console.log("🧹 Clearing poll interval")
+        clearInterval(pollRef.current)
+      }
     }
   }, [otherParty])
 
@@ -44,26 +69,44 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
     if (!otherParty) return
     
     try {
-      const r = await fetch(`${API}/billing/chat/messages?user_a=${user.id}&user_b=${otherParty}`)
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const url = `${API}/billing/chat/messages?user_a=${user.id}&user_b=${otherParty}`
+      console.log("📡 Fetching:", url)
+      
+      const r = await fetch(url)
+      console.log("📡 Response status:", r.status)
+      
+      if (!r.ok) {
+        const errText = await r.text()
+        console.error("❌ Load error:", r.status, errText)
+        throw new Error(`HTTP ${r.status}: ${errText}`)
+      }
+      
       const d = await r.json()
+      console.log("📡 Messages loaded:", d.messages?.length || 0)
       setMessages(d.messages ?? [])
       setError(null)
+      setLoading(false)
     } catch (e) {
-      console.error("Chat load error:", e)
+      console.error("❌ Chat load error:", e)
+      setError(`Ошибка загрузки: ${e.message}`)
+      setLoading(false)
     }
   }
 
   const send = async (textOverride) => {
     const text = (textOverride ?? input).trim()
-    if (!text || sending || !otherParty) return
+    if (!text || sending || !otherParty) {
+      console.warn("⚠️ Cannot send:", { hasText: !!text, sending, hasOtherParty: !!otherParty })
+      return
+    }
+    
+    console.log("📤 Sending message to:", otherParty, "text:", text.substring(0, 50))
     
     setSending(true)
     setError(null)
     setInput("")
     
-    // Оптимистично добавляем сообщение
-    const tempId = Date.now().toString()
+    const tempId = `temp_${Date.now()}`
     const tempMsg = {
       _id: tempId,
       from_id: user.id,
@@ -84,19 +127,27 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
         })
       })
       
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      console.log("📤 Send response status:", r.status)
+      
+      if (!r.ok) {
+        const errText = await r.text()
+        console.error("❌ Send error:", r.status, errText)
+        throw new Error(`HTTP ${r.status}`)
+      }
       
       const d = await r.json()
-      if (!d.success) throw new Error(d.error || "Ошибка отправки")
+      console.log("📤 Send response:", d)
       
-      // Перезагружаем сообщения с сервера
+      if (!d.success) {
+        throw new Error(d.error || "Ошибка отправки")
+      }
+      
       await loadMessages()
     } catch (e) {
-      console.error("Chat send error:", e)
-      setError("Не удалось отправить сообщение")
-      // Удаляем оптимистичное сообщение при ошибке
+      console.error("❌ Send failed:", e)
+      setError(`Не удалось отправить: ${e.message}`)
       setMessages(prev => prev.filter(m => m._id !== tempId))
-      setInput(text) // Возвращаем текст
+      setInput(text)
     } finally {
       setSending(false)
     }
@@ -114,7 +165,7 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
     e.target.style.height = Math.min(e.target.scrollHeight, 110) + "px"
   }
 
-  // Если otherParty не определён — показываем ошибку
+  // Если otherParty не определён
   if (!otherParty) {
     return (
       <div style={st.root}>
@@ -129,8 +180,60 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
             <div style={st.hstatus}>Не удалось определить получателя</div>
           </div>
         </div>
-        <div style={{ padding: 20, textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
-          ⚠️ Ошибка загрузки чата. Попробуйте перезапустить приложение.
+        <div style={{ padding: 40, textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: "#f1f5f9" }}>
+            Не удалось загрузить чат
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+            Попробуйте перезапустить приложение<br/>
+            или обратитесь в поддержку
+          </div>
+          <button 
+            onClick={goBack}
+            style={{
+              marginTop: 20,
+              padding: "10px 20px",
+              background: "rgba(99,102,241,0.15)",
+              border: "1px solid rgba(99,102,241,0.3)",
+              borderRadius: 10,
+              color: "#818cf8",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: "pointer"
+            }}
+          >
+            ← Вернуться назад
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Показываем загрузку
+  if (loading) {
+    return (
+      <div style={st.root}>
+        <div style={st.header}>
+          <button style={st.back} onClick={goBack}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <div style={st.avatar}>{icon}</div>
+          <div style={st.hinfo}>
+            <div style={st.hname}>{label}</div>
+            <div style={st.hstatus}>Загрузка...</div>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{
+            width: 32, height: 32,
+            border: "2.5px solid rgba(255,255,255,0.08)",
+            borderTop: "2.5px solid #6366f1",
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite"
+          }} />
         </div>
       </div>
     )
@@ -156,7 +259,7 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
       </div>
 
       <div style={st.chat} ref={chatRef}>
-        {messages.length === 0 && (
+        {messages.length === 0 && !error && (
           <div style={st.empty}>
             <div style={{ fontSize: 42, marginBottom: 8 }}>{icon}</div>
             <div style={st.emptyT}>Начните диалог</div>
@@ -185,10 +288,20 @@ export default function OrderChat({ user, managerId, goBack, prefill, chatLabel,
 
       {error && (
         <div style={st.errorBanner}>
-          ⚠️ {error}
+          <span>⚠️ {error}</span>
           <button 
             onClick={loadMessages}
-            style={{ marginLeft: 10, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: 6, padding: "4px 8px", cursor: "pointer", fontSize: 11 }}
+            style={{ 
+              background: "rgba(255,255,255,0.15)", 
+              border: "none", 
+              color: "#fff", 
+              borderRadius: 6, 
+              padding: "4px 10px", 
+              cursor: "pointer", 
+              fontSize: 11,
+              fontWeight: 600,
+              marginLeft: 10 
+            }}
           >
             Повторить
           </button>
