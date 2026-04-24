@@ -107,43 +107,58 @@ export default function Wallet({ user, goBack, subscription, reloadSubscription 
 
   // ── Пополнение Stars ────────────────────────────────────────────
 
-  const handleTopupStars = async () => {
+// Замените функцию handleTopupStars на эту:
+const handleTopupStars = async () => {
     const stars = parseInt(topupAmount)
     if (!stars || stars < 1) { showToast("Введите количество звёзд", false); return }
     setLoading(true)
     try {
-      const res  = await fetch(`${API}/billing/topup-stars`, {
+      const res = await fetch(`${API}/billing/topup-stars`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: user.id, stars })
       })
       const data = await res.json()
+      
       if (data.invoice_url) {
+        // Пробуем разные способы открытия
         if (window.Telegram?.WebApp?.openInvoice) {
+          // Правильный вызов openInvoice — передаём URL
           window.Telegram.WebApp.openInvoice(data.invoice_url, (status) => {
             if (status === "paid") {
               showToast(`✅ Оплачено ${stars} ⭐ — баланс пополнен!`)
               loadBalance()
-              setView("main"); setTopupAmount("")
+              setView("main")
+              setTopupAmount("")
             } else if (status === "cancelled") {
               showToast("Оплата отменена", false)
+            } else if (status === "failed") {
+              showToast("Ошибка оплаты", false)
             }
           })
+        } else if (window.Telegram?.WebApp?.openLink) {
+          // Fallback: открываем как обычную ссылку
+          window.Telegram.WebApp.openLink(data.invoice_url)
+          showToast("Откройте ссылку для оплаты Stars")
+          setView("main")
+          setTopupAmount("")
         } else {
+          // Для браузера
           window.open(data.invoice_url, "_blank")
           showToast("Откройте ссылку для оплаты Stars")
-          setView("main"); setTopupAmount("")
+          setView("main")
+          setTopupAmount("")
         }
       } else {
         showToast(data.error ?? "Ошибка создания инвойса Stars", false)
       }
-    } catch {
+    } catch (e) {
+      console.error("Stars error:", e)
       showToast("Ошибка соединения", false)
     } finally {
       setLoading(false)
     }
   }
-
   // ── Пополнение Crypto ───────────────────────────────────────────
 
   const handleTopupCrypto = async () => {

@@ -111,23 +111,31 @@ function CalcView({ calc, goBack }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    let cancelled = false
+    
     const tryInit = () => {
-      if (!containerRef.current) return
+      if (!containerRef.current || cancelled) return
+      
       if (window.Desmos) {
         initCalc()
       } else {
-        // Загружаем API
         if (!document.querySelector(`script[src*="desmos.com"]`)) {
           const script = document.createElement("script")
           script.src = DESMOS_API
           script.async = true
-          script.onload = initCalc
-          script.onerror = () => setError("Не удалось загрузить Desmos API. Проверьте соединение.")
+          script.onload = () => {
+            if (!cancelled) initCalc()
+          }
+          script.onerror = () => {
+            if (!cancelled) setError("Не удалось загрузить Desmos API. Проверьте соединение.")
+          }
           document.head.appendChild(script)
         } else {
-          // Уже загружается — ждём
           const interval = setInterval(() => {
-            if (window.Desmos) { clearInterval(interval); initCalc() }
+            if (window.Desmos) {
+              clearInterval(interval)
+              if (!cancelled) initCalc()
+            }
           }, 100)
           return () => clearInterval(interval)
         }
@@ -135,24 +143,68 @@ function CalcView({ calc, goBack }) {
     }
 
     const initCalc = () => {
-      if (!containerRef.current) return
+      if (!containerRef.current || cancelled) return
       try {
         if (calcInstanceRef.current) {
           calcInstanceRef.current.destroy?.()
+          calcInstanceRef.current = null
         }
-        calcInstanceRef.current = calc.init(containerRef.current)
-        setLoaded(true)
+        
+        containerRef.current.innerHTML = ""
+        
+        setTimeout(() => {
+          if (!containerRef.current || cancelled) return
+          
+          try {
+            calcInstanceRef.current = calc.init(containerRef.current)
+            setLoaded(true)
+            setError(null)
+          } catch (e) {
+            console.error("Init error:", e)
+            setError(`Ошибка инициализации: ${e.message}`)
+          }
+        }, 100)
+        
       } catch (e) {
-        setError(`Ошибка инициализации: ${e.message}`)
+        console.error("Calc error:", e)
+        setError(`Ошибка: ${e.message}`)
       }
     }
 
     tryInit()
 
     return () => {
-      calcInstanceRef.current?.destroy?.()
+      cancelled = true
+      if (calcInstanceRef.current) {
+        try {
+          calcInstanceRef.current.destroy?.()
+        } catch (e) {}
+        calcInstanceRef.current = null
+      }
     }
   }, [calc.id])
+
+  const retryInit = () => {
+    setError(null)
+    setLoaded(false)
+    if (calcInstanceRef.current) {
+      calcInstanceRef.current.destroy?.()
+      calcInstanceRef.current = null
+    }
+    const el = containerRef.current
+    if (el && window.Desmos) {
+      el.innerHTML = ""
+      setTimeout(() => {
+        try {
+          calcInstanceRef.current = calc.init(el)
+          setLoaded(true)
+          setError(null)
+        } catch (e) {
+          setError(`Ошибка: ${e.message}`)
+        }
+      }, 200)
+    }
+  }
 
   return (
     <div style={cv.root}>
@@ -169,13 +221,22 @@ function CalcView({ calc, goBack }) {
           <span style={cv.title}>{calc.title}</span>
           <span style={cv.sub}>Desmos · {loaded ? "готов" : "загрузка..."}</span>
         </div>
+        {error && (
+          <button 
+            style={cv.retryButton}
+            onClick={retryInit}
+            title="Перезагрузить"
+          >
+            🔄
+          </button>
+        )}
       </div>
 
       {error && (
         <div style={cv.errBox}>
           <div style={{ color: "#ef4444", fontSize: 14 }}>⚠️ {error}</div>
           <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 6 }}>
-            Попробуйте открыть в браузере: desmos.com
+            Попробуйте перезагрузить или откройте в браузере: desmos.com/3d
           </div>
         </div>
       )}
@@ -286,9 +347,14 @@ const cv = {
     width: 36, height: 36, borderRadius: 10,
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
-  headerInfo: { display: "flex", flexDirection: "column", gap: 1 },
+  headerInfo: { display: "flex", flexDirection: "column", gap: 1, flex: 1 },
   title: { fontSize: 15, fontWeight: 600, color: "#f1f5f9" },
   sub: { fontSize: 11, color: "rgba(255,255,255,0.35)" },
+  retryButton: {
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 8, color: "#f1f5f9", padding: "6px 8px", cursor: "pointer",
+    fontSize: 14, flexShrink: 0,
+  },
   calcContainer: {
     flex: 1, width: "100%", transition: "opacity 0.3s",
   },
