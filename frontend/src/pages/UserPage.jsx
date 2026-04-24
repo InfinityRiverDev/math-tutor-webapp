@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { API, MANAGER_ID, PRINT_MANAGER_ID, MANAGER_IDS } from "../App"
+import { API } from "../App"
 import Tutor      from "./Tutor"
 import Profile    from "./Profile"
 import Wallet     from "./Wallet"
@@ -16,15 +16,18 @@ const PRESENTATION_TEMPLATES = [
   { id: "gradient",   name: "Градиент",    desc: "Плавные переходы цветов",           emoji: "🌈", color: "linear-gradient(135deg,rgba(99,102,241,0.3),rgba(236,72,153,0.3))" },
 ]
 
-// ✅ Конфигурация чатов прямо здесь (с гарантированными ID)
+// Прямо здесь, без импорта из App
+const MANAGER_ID_LOCAL       = 858414038
+const PRINT_MANAGER_ID_LOCAL = 1991833177
+
 const CHAT_CONFIGS = {
   presentation: { 
-    managerId: MANAGER_ID,       
+    managerId: MANAGER_ID_LOCAL,       
     icon: "🎞️", 
     label: "Презентации" 
   },
   print: { 
-    managerId: PRINT_MANAGER_ID, 
+    managerId: PRINT_MANAGER_ID_LOCAL, 
     icon: "🖨️", 
     label: "Распечатка"  
   },
