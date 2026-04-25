@@ -50,7 +50,7 @@ export default function AdminPage({ user, subscription, reloadSub, startParams }
       initialView={startParams?.desmos ? "desmos" : null}
       initialDesmos={startParams?.desmos} />
   if (page === "focus")
-    return <Focus goBack={() => setPage("home")} />
+    return <Focus goBack={() => setPage("home")} user={user} />  // ← передаём user
   if (page === "profile")
     return <Profile user={user} goBack={() => setPage("home")} subscription={subscription} />
   if (page === "wallet")

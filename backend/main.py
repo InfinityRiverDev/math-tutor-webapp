@@ -4,13 +4,14 @@ main.py  —  FastAPI backend Math Tutor
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import calculator, tutor, user
+from routes import calculator, tutor, user, art
 from routes.billing      import router as billing_router
 from routes.admin_routes import router as admin_router
 from routes.admin_stats  import router as admin_stats_router
 from routes.schedule     import router as schedule_router
 from routes.lectures     import router as lectures_router
 from routes.music_route  import router as music_router
+
 
 app = FastAPI(title="Math Tutor API")
 
@@ -31,6 +32,7 @@ app.include_router(admin_stats_router)  # /admin/stats/*, /admin/users/search
 app.include_router(schedule_router)     # /schedule
 app.include_router(lectures_router)     # /lectures/*
 app.include_router(music_router)        # /music/*
+app.include_router(art.router)
 
 
 @app.get("/")

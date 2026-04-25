@@ -89,7 +89,7 @@ export default function UserPage({ user, subscription, reloadSub, startParams })
   if (page === "education")
     return <Education user={user} goBack={() => setPage("home")} initialView={startParams?.desmos ? "desmos" : null} initialDesmos={startParams?.desmos} />
   if (page === "focus")
-    return <Focus goBack={() => setPage("home")} />
+    return <Focus goBack={() => setPage("home")} user={user} />
   if (page === "stats")
     return <StatsView goBack={() => setPage("home")} user={user} />
   if (page === "services")

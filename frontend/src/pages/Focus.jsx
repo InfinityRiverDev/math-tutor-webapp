@@ -5,7 +5,7 @@ export default function Focus({ goBack }) {
 
   if (view === "pomodoro") return <PomodoroView goBack={() => setView("menu")} />
   if (view === "todo")     return <TodoView     goBack={() => setView("menu")} />
-  if (view === "music")    return <MusicView    goBack={() => setView("menu")} />
+  if (view === "music")    return <MusicView    goBack={() => setView("menu")} user={user} />  // ← передаём user
 
   return (
     <div style={s.root}>
@@ -190,7 +190,7 @@ const td = {
 
 // ── Музыка ────────────────────────────────────────────────────────
 
-function MusicView({ goBack }) {
+function MusicView({ goBack, user }) {   // ← получаем user
   const [query,   setQuery]   = useState("")
   const [status,  setStatus]  = useState(null)
   const [loading, setLoading] = useState(false)
@@ -202,8 +202,9 @@ function MusicView({ goBack }) {
     setStatus(null)
     try {
       const res  = await fetch(`${API_URL}/music/search`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim(), user_id: 0 })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: query.trim(), user_id: user?.id || 0 })  // ← реальный ID
       })
       const data = await res.json()
       setStatus(data.ok ? { ok: true,  msg: data.message } : { ok: false, msg: data.message })
@@ -213,7 +214,6 @@ function MusicView({ goBack }) {
       setLoading(false)
     }
   }
-
   return (
     <div style={s.root}>
       <div style={s.header}>
