@@ -16,6 +16,8 @@ function getUrlParams() {
     return {
       desmos:   params.get("desmos"),      // graphing | scientific | arithmetic | geometry | 3d
       page:     params.get("page"),        // education | wallet | tutor | etc
+      openchat:  params.get("openchat"),   // ← НОВОЕ: "presentation" | "print"
+      template:  params.get("template")
     }
   } catch {
     return {}

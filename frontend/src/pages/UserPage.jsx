@@ -7,13 +7,13 @@ import Education  from "./Education"
 import Focus      from "./Focus"
 import OrderChat  from "./OrderChat"
 import StatsView  from "./StatsView"
+import ArtGen from "./ArtGen"
 
 const PRESENTATION_TEMPLATES = [
-  { id: "minimalism", name: "Минимализм",  desc: "Чистый и аккуратный стиль",         emoji: "⬜", color: "rgba(148,163,184,0.2)" },
-  { id: "corporate",  name: "Корпоратив",  desc: "Строгий деловой стиль",             emoji: "🏢", color: "rgba(59,130,246,0.2)"  },
-  { id: "creative",   name: "Креатив",     desc: "Яркие цвета и нестандартность",     emoji: "🎨", color: "rgba(245,158,11,0.2)"  },
-  { id: "dark",       name: "Тёмная тема", desc: "Элегантный тёмный дизайн",          emoji: "🌑", color: "rgba(30,30,50,0.8)"    },
-  { id: "gradient",   name: "Градиент",    desc: "Плавные переходы цветов",           emoji: "🌈", color: "linear-gradient(135deg,rgba(99,102,241,0.3),rgba(236,72,153,0.3))" },
+  { id: "minimalism", name: "Минимализм",  desc: "Чистый и аккуратный стиль",     emoji: "⬜", color: "rgba(148,163,184,0.2)", image: "/templates/collage_1.jpg" },
+  { id: "corporate",  name: "Корпоратив",  desc: "Строгий деловой стиль",         emoji: "🏢", color: "rgba(59,130,246,0.2)",  image: "/templates/collage_2.jpg"  },
+  { id: "creative",   name: "Креатив",     desc: "Яркие цвета и нестандартность", emoji: "🎨", color: "rgba(245,158,11,0.2)",  image: "/templates/collage_3.jpg"   },
+  { id: "dark",       name: "Тёмная тема", desc: "Элегантный тёмный дизайн",      emoji: "🌑", color: "rgba(30,30,50,0.8)",    image: "/templates/collage_4.jpg"       }
 ]
 
 // Прямо здесь, без импорта из App
@@ -37,6 +37,7 @@ const ITEMS = [
   { id:"tutor",     icon:"🎓", label:"ИИ-репетитор", desc:"Задай вопрос — получи ответ",  color:"#6366f1", locked:true  },
   { id:"education", icon:"📚", label:"Образование",   desc:"Лекции, расписание, Desmos",   color:"#0ea5e9", locked:true  },
   { id:"focus",     icon:"🎯", label:"Фокус",         desc:"Помодоро, музыка, To-Do",      color:"#f59e0b", locked:true  },
+  { id:"artgen",    icon:"🎨", label:"AI-рисование",  desc:"Генерация картинок",           color:"#ec4899", locked:true  }, // ← ДОБАВЬ
   { id:"services",  icon:"📝", label:"Услуги",        desc:"Мои заказы и чаты",            color:"#10b981", locked:false },
   { id:"wallet",    icon:"💼", label:"Кошелёк",       desc:"Баланс и тарифы",              color:"#f59e0b", locked:false },
   { id:"profile",   icon:"👤", label:"Профиль",       desc:"Данные и подписка",            color:"#ec4899", locked:false },
@@ -45,16 +46,21 @@ const ITEMS = [
 
 export default function UserPage({ user, subscription, reloadSub, startParams }) {
   const getInitialPage = () => {
-    if (startParams?.desmos) return "education"
-    if (startParams?.page)   return startParams.page
+    if (startParams?.desmos)   return "education"
+    if (startParams?.openchat) return "order_chat"  // ← сразу в чат
+    if (startParams?.page)     return startParams.page
     return "home"
   }
 
   const [page,     setPage]     = useState(getInitialPage())
-  const [pressed,  setPressed]  = useState(null)
-  const [flash,    setFlash]    = useState(null)
-  const [chatType, setChatType] = useState(null)
-  const [prefill,  setPrefill]  = useState(null)
+  const [chatType, setChatType] = useState(startParams?.openchat || null)  // ← из URL
+  const [prefill,  setPrefill]  = useState(
+    startParams?.template
+      ? `Хочу заказать презентацию по шаблону «${startParams.template}»`
+      : null
+  )
+  const [pressed, setPressed] = useState(null)  // ← ДОБАВЬ
+  const [flash,   setFlash]   = useState(null)  // ← ДОБАВЬ
 
   const hasSub = subscription?.active === true
 
@@ -88,6 +94,8 @@ export default function UserPage({ user, subscription, reloadSub, startParams })
     return <StatsView goBack={() => setPage("home")} user={user} />
   if (page === "services")
     return <ServicesPage user={user} goBack={() => setPage("home")} onOpenChat={openChat} />
+  if (page === "artgen")
+  return <ArtGen goBack={() => setPage("home")} />
 
   // ✅ ИСПРАВЛЕНО: передаём КОНКРЕТНЫЙ managerId
   if (page === "order_chat" && chatType) {
@@ -306,6 +314,8 @@ function ServicesPage({ user, goBack, onOpenChat }) {
 }
 
 function PresentationTemplates({ goBack, onSelect }) {
+  const [selected, setSelected] = useState(null)
+
   return (
     <div style={sv.root}>
       <div style={sv.header}>
@@ -322,32 +332,48 @@ function PresentationTemplates({ goBack, onSelect }) {
 
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ ...sv.info, marginBottom: 4 }}>
-          Нажмите на шаблон — откроется чат с менеджером с уже выбранным стилем.
+          Нажмите на шаблон чтобы увидеть пример — затем заказывайте.
         </div>
+
         {PRESENTATION_TEMPLATES.map(tmpl => (
-          <button key={tmpl.id} style={pt.card} onClick={() => onSelect(tmpl.name)}>
-            <div style={{ ...pt.preview, background: tmpl.color }}>
-              <span style={{ fontSize: 34 }}>{tmpl.emoji}</span>
-              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", marginTop: 4, fontWeight: 600 }}>
-                {tmpl.name.toUpperCase()}
-              </span>
-            </div>
-            <div style={pt.info}>
-              <div style={pt.name}>{tmpl.name}</div>
-              <div style={pt.desc}>{tmpl.desc}</div>
-              <div style={pt.price}>от 250₽ · 1 день</div>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M6 4l4 4-4 4" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"
-                strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+          <div key={tmpl.id} style={pt.wrapper}>
+            {/* Карточка шаблона */}
+            <button style={pt.card} onClick={() => setSelected(selected?.id === tmpl.id ? null : tmpl)}>
+              {/* Превью — фото если есть, иначе заглушка */}
+              <div style={{ ...pt.preview, background: tmpl.color, position: "relative", overflow: "hidden" }}>
+                {tmpl.image
+                  ? <img src={tmpl.image} alt={tmpl.name} style={pt.previewImg} onError={e => e.target.style.display = "none"} />
+                  : <span style={{ fontSize: 34 }}>{tmpl.emoji}</span>
+                }
+              </div>
+              <div style={pt.info}>
+                <div style={pt.name}>{tmpl.name}</div>
+                <div style={pt.desc}>{tmpl.desc}</div>
+                <div style={pt.price}>от 250₽ · 1 день</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
+                style={{ transform: selected?.id === tmpl.id ? "rotate(90deg)" : "none", transition: "transform 0.2s", flexShrink:0 }}>
+                <path d="M6 4l4 4-4 4" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+
+            {/* Раскрывающийся блок с большим превью */}
+            {selected?.id === tmpl.id && (
+              <div style={pt.expanded}>
+                {tmpl.image && (
+                  <img src={tmpl.image} alt={tmpl.name} style={pt.bigImg} />
+                )}
+                <button style={pt.orderBtn} onClick={() => onSelect(tmpl.name)}>
+                  💬 Заказать этот шаблон →
+                </button>
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </div>
   )
 }
-
 const s = {
   root:   { minHeight:"100vh", background:"#0a0f1e", display:"flex", flexDirection:"column", padding:"0 0 32px", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
   header: { position:"relative", overflow:"hidden", display:"flex", alignItems:"center", gap:14, padding:"28px 20px 22px", background:"linear-gradient(160deg,#131929 0%,#0a0f1e 100%)", borderBottom:"1px solid rgba(255,255,255,0.05)" },
@@ -389,10 +415,16 @@ const sv = {
 }
 
 const pt = {
-  card:    { display:"flex", alignItems:"center", gap:14, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"14px", cursor:"pointer", textAlign:"left", width:"100%", boxSizing:"border-box" },
-  preview: { width:72, height:72, borderRadius:12, flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" },
-  info:    { flex:1, display:"flex", flexDirection:"column", gap:3 },
-  name:    { fontSize:15, fontWeight:700, color:"#f1f5f9" },
-  desc:    { fontSize:12, color:"rgba(255,255,255,0.4)" },
-  price:   { fontSize:12, color:"#818cf8", marginTop:2 },
+  // старые стили оставь, добавь новые:
+  wrapper:    { display:"flex", flexDirection:"column", gap:0 },
+  card:       { display:"flex", alignItems:"center", gap:14, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"14px", cursor:"pointer", textAlign:"left", width:"100%", boxSizing:"border-box" },
+  preview:    { width:72, height:72, borderRadius:12, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" },
+  previewImg: { width:"100%", height:"100%", objectFit:"cover" },
+  info:       { flex:1, display:"flex", flexDirection:"column", gap:3 },
+  name:       { fontSize:15, fontWeight:700, color:"#f1f5f9" },
+  desc:       { fontSize:12, color:"rgba(255,255,255,0.4)" },
+  price:      { fontSize:12, color:"#818cf8", marginTop:2 },
+  expanded:   { background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderTop:"none", borderRadius:"0 0 16px 16px", padding:14, display:"flex", flexDirection:"column", gap:12 },
+  bigImg:     { width:"100%", borderRadius:12, border:"1px solid rgba(255,255,255,0.08)" },
+  orderBtn:   { padding:"12px", background:"linear-gradient(135deg,#6366f1,#4f46e5)", border:"none", borderRadius:12, color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" },
 }
