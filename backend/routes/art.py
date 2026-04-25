@@ -2,7 +2,7 @@
 import base64
 from fastapi import APIRouter
 from pydantic import BaseModel
-from services.yandex_art import generate_image
+from services.yandex_art import generate_image   # теперь импорт сработает
 
 router = APIRouter(prefix="/art")
 
@@ -22,6 +22,6 @@ async def art_generate(req: ArtRequest):
     if image_bytes is None:
         return {"error": "Не удалось сгенерировать изображение"}
 
-    # Возвращаем base64 изображения как data URL
+    # Возвращаем base64 PNG как data URL
     b64 = base64.b64encode(image_bytes).decode("utf-8")
     return {"url": f"data:image/png;base64,{b64}"}
