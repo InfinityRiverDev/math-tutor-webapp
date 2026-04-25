@@ -1,11 +1,11 @@
 import { useState } from "react"
 
-export default function Focus({ goBack }) {
+export default function Focus({ goBack, user }) {   // ✅ принимаем user
   const [view, setView] = useState("menu")
 
   if (view === "pomodoro") return <PomodoroView goBack={() => setView("menu")} />
   if (view === "todo")     return <TodoView     goBack={() => setView("menu")} />
-  if (view === "music")    return <MusicView    goBack={() => setView("menu")} user={user} />  // ← передаём user
+  if (view === "music")    return <MusicView    goBack={() => setView("menu")} user={user} />  // ✅ передаём user
 
   return (
     <div style={s.root}>
@@ -44,7 +44,7 @@ function NavCard({ icon, title, desc, color, glow, onClick }) {
 // ── Помодоро ──────────────────────────────────────────────────────
 
 function PomodoroView({ goBack }) {
-  const [mode,     setMode]     = useState("idle")   // idle | work | break
+  const [mode,     setMode]     = useState("idle")
   const [seconds,  setSeconds]  = useState(25 * 60)
   const [cycles,   setCycles]   = useState(0)
   const [workMin,  setWorkMin]  = useState(25)
@@ -188,9 +188,9 @@ const td = {
   del:    { background:"transparent", border:"none", color:"rgba(255,255,255,0.3)", fontSize:14, cursor:"pointer", padding:4 },
 }
 
-// ── Музыка ────────────────────────────────────────────────────────
+// ── Музыка (исправленная) ────────────────────────────────────────
 
-function MusicView({ goBack, user }) {   // ← получаем user
+function MusicView({ goBack, user }) {  // ✅ получаем user
   const [query,   setQuery]   = useState("")
   const [status,  setStatus]  = useState(null)
   const [loading, setLoading] = useState(false)
@@ -204,7 +204,10 @@ function MusicView({ goBack, user }) {   // ← получаем user
       const res  = await fetch(`${API_URL}/music/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim(), user_id: user?.id || 0 })  // ← реальный ID
+        body: JSON.stringify({ 
+          query: query.trim(), 
+          user_id: user?.id || 0  // ✅ реальный ID пользователя
+        })
       })
       const data = await res.json()
       setStatus(data.ok ? { ok: true,  msg: data.message } : { ok: false, msg: data.message })
@@ -214,27 +217,47 @@ function MusicView({ goBack, user }) {   // ← получаем user
       setLoading(false)
     }
   }
+
   return (
     <div style={s.root}>
       <div style={s.header}>
-        <button style={s.back} onClick={goBack}><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-        <div style={s.hinfo}><span style={s.htitle}>🎧 Музыка</span><span style={s.hsub}>Поиск треков</span></div>
+        <button style={s.back} onClick={goBack}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M11 14L6 9l5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        <div style={s.hinfo}>
+          <span style={s.htitle}>🎧 Музыка</span>
+          <span style={s.hsub}>Поиск треков</span>
+        </div>
       </div>
       <div style={{ padding:16, display:"flex", flexDirection:"column", gap:14 }}>
         <div style={{ background:"rgba(139,92,246,0.08)", border:"1px solid rgba(139,92,246,0.2)", borderRadius:14, padding:"14px 16px", fontSize:13, color:"rgba(255,255,255,0.5)", lineHeight:1.55 }}>
           🎵 Введите название трека или исполнителя — бот найдёт и отправит аудио в Telegram
         </div>
         <div style={{ display:"flex", gap:8 }}>
-          <input value={query} onChange={e => setQuery(e.target.value)}
+          <input 
+            value={query} 
+            onChange={e => setQuery(e.target.value)}
             onKeyDown={e => e.key === "Enter" && search()}
             placeholder="Исполнитель — Название трека"
-            style={{ flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:"12px 14px", color:"#f1f5f9", fontSize:14.5, outline:"none", fontFamily:"inherit" }} />
-          <button style={{ width:48, height:48, background:"linear-gradient(135deg,#8b5cf6,#6366f1)", border:"none", borderRadius:12, color:"#fff", fontSize:20, cursor:"pointer", flexShrink:0 }} onClick={search}>
+            style={{ flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, padding:"12px 14px", color:"#f1f5f9", fontSize:14.5, outline:"none", fontFamily:"inherit" }} 
+          />
+          <button 
+            style={{ width:48, height:48, background:"linear-gradient(135deg,#8b5cf6,#6366f1)", border:"none", borderRadius:12, color:"#fff", fontSize:20, cursor:"pointer", flexShrink:0 }} 
+            onClick={search}
+            disabled={loading}
+          >
             {loading ? "⏳" : "🔍"}
           </button>
         </div>
         {status && (
-          <div style={{ background: status.ok ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", border:`1px solid ${status.ok ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`, borderRadius:12, padding:"12px 14px", fontSize:14, color: status.ok ? "#10b981" : "#ef4444" }}>
+          <div style={{ 
+            background: status.ok ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", 
+            border: `1px solid ${status.ok ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`, 
+            borderRadius:12, padding:"12px 14px", fontSize:14, 
+            color: status.ok ? "#10b981" : "#ef4444" 
+          }}>
             {status.msg}
           </div>
         )}
