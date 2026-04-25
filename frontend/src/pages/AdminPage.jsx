@@ -7,6 +7,9 @@ import Profile    from "./Profile"
 import Wallet     from "./Wallet"
 import OrderChat  from "./OrderChat"
 import StatsView  from "./StatsView"
+import SelfDestruct from "./SelfDestruct"
+
+
 
 const MANAGER_CFG = {
   [MANAGER_ID]:       { label: "Презентации", chatType: "presentation" },
@@ -24,6 +27,7 @@ const USER_TILES = [
   { id:"wallet",     icon:"💼", label:"Кошелёк",   color:"#f59e0b" },
   { id:"profile",    icon:"👤", label:"Профиль",   color:"#ec4899" },
   { id:"stats_user", icon:"📊", label:"Стат-ка",   color:"#10b981" },
+  { id:"self_destruct", icon:"⚠️", label:"Самоликв.", color:"#ef4444" }
 ]
 const TEMPLATES = [
   { id:"minimalism", name:"Минимализм",  desc:"Чистый и аккуратный стиль",    emoji:"⬜", color:"rgba(148,163,184,0.2)" },
@@ -59,6 +63,8 @@ export default function AdminPage({ user, subscription, reloadSub, startParams }
     return <StatsView goBack={() => setPage("home")} user={user} />
   if (page === "services")
     return <UserServicesPage user={user} goBack={() => setPage("home")} />
+  if (page === "self_destruct")
+    return <SelfDestruct user={user} goBack={() => setPage("home")} />
   if (page === "user_chat") {
     const cfg = CHAT_CONFIGS[chatType] ?? CHAT_CONFIGS.presentation
     return <OrderChat user={user} managerId={cfg.managerId}
