@@ -2,17 +2,13 @@
 main.py  —  FastAPI backend Math Tutor
 """
 import sys
-import os
 from pathlib import Path
-
-# Добавляем корень проекта (src/) в sys.path,
-# чтобы работали импорты из services/ и database/
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))   # добавляем backend/
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import calculator, tutor, user, art   # ← art добавлен
+from routes import calculator, tutor, user, art
 from routes.billing      import router as billing_router
 from routes.admin_routes import router as admin_router
 from routes.admin_stats  import router as admin_stats_router
@@ -39,7 +35,7 @@ app.include_router(admin_stats_router)
 app.include_router(schedule_router)
 app.include_router(lectures_router)
 app.include_router(music_router)
-app.include_router(art.router)          # ← регистрируем art
+app.include_router(art.router)
 
 @app.get("/")
 async def root():
