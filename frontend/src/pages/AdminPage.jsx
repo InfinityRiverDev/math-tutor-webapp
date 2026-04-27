@@ -23,7 +23,6 @@ const USER_TILES = [
   { id:"tutor",      icon:"🎓", label:"Репетитор", color:"#6366f1" },
   { id:"education",  icon:"📚", label:"Учёба",     color:"#0ea5e9" },
   { id:"focus",      icon:"🎯", label:"Фокус",     color:"#f59e0b" },
-  { id:"services",   icon:"📝", label:"Услуги",    color:"#10b981" },
   { id:"wallet",     icon:"💼", label:"Кошелёк",   color:"#f59e0b" },
   { id:"profile",    icon:"👤", label:"Профиль",   color:"#ec4899" },
   { id:"stats_user", icon:"📊", label:"Стат-ка",   color:"#10b981" },
@@ -61,8 +60,6 @@ export default function AdminPage({ user, subscription, reloadSub, startParams }
     return <Wallet user={user} goBack={() => setPage("home")} subscription={subscription} reloadSubscription={reloadSub} />
   if (page === "stats_user")
     return <StatsView goBack={() => setPage("home")} user={user} />
-  if (page === "services")
-    return <UserServicesPage user={user} goBack={() => setPage("home")} />
   if (page === "self_destruct")
     return <SelfDestruct user={user} goBack={() => setPage("home")} />
   if (page === "user_chat") {
