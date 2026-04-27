@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import MainPage from "./pages/MainPage"
 import "./App.css"
 
-export const API              = "https://math-tutor-webapp.onrender.com"
+export const API              = "https://app.kstubot.ru"
 export const MANAGER_ID       = 858414038
 export const PRINT_MANAGER_ID = 1991833177
 export const ADMIN_IDS        = [1991833177, 808603029, 1114949712]
