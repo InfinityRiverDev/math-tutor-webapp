@@ -1,6 +1,6 @@
 import { useState } from "react"
 
-const API = "https://math-tutor-webapp.onrender.com"
+import { API } from "../App"
 
 export default function Calculator({ goBack }) {
   const [input, setInput] = useState("")

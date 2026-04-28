@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 
-const API = "https://math-tutor-webapp.onrender.com"
+import { API } from "../App"
 
 export default function Profile({ user, goBack, subscription }) {
   const [profile, setProfile] = useState(null)

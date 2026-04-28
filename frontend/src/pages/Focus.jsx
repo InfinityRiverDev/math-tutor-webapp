@@ -1,5 +1,7 @@
 import { useState } from "react"
 
+import { API } from "../App"
+
 export default function Focus({ goBack, user }) {   // ✅ принимаем user
   const [view, setView] = useState("menu")
 
@@ -194,7 +196,6 @@ function MusicView({ goBack, user }) {  // ✅ получаем user
   const [query,   setQuery]   = useState("")
   const [status,  setStatus]  = useState(null)
   const [loading, setLoading] = useState(false)
-  const API_URL = "https://math-tutor-webapp.onrender.com"
 
   const search = async () => {
     if (!query.trim() || loading) return
