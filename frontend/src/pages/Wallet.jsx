@@ -11,8 +11,6 @@ export default function Wallet({ user, goBack, subscription, reloadSubscription 
   const [promoResult,   setPromoResult]   = useState(null)
   const [loading,       setLoading]       = useState(false)
   const [toast,         setToast]         = useState(null)
-  const [trialUsed,     setTrialUsed]     = useState(false)
-  const [trialLoading,  setTrialLoading]  = useState(false)
 
   useEffect(() => {
     loadPlans()
@@ -36,14 +34,6 @@ export default function Wallet({ user, goBack, subscription, reloadSubscription 
     } catch {}
   }
 
-  const checkTrial = async () => {
-    try {
-      const res  = await fetch(`${API}/billing/trial/check?user_id=${user.id}`)
-      const data = await res.json()
-      setTrialUsed(data.used ?? false)
-    } catch {}
-  }
-
   const showToast = (msg, ok = true) => {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 3500)
@@ -51,28 +41,7 @@ export default function Wallet({ user, goBack, subscription, reloadSubscription 
 
   // ── Пробный период ──────────────────────────────────────────────
 
-  const activateTrial = async () => {
-    setTrialLoading(true)
-    try {
-      const res  = await fetch(`${API}/billing/trial/activate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id })
-      })
-      const data = await res.json()
-      if (data.success) {
-        showToast("🎁 Пробный период на 2 дня активирован!")
-        setTrialUsed(true)
-        await reloadSubscription()
-      } else {
-        showToast(data.error ?? "Ошибка активации", false)
-      }
-    } catch {
-      showToast("Ошибка соединения", false)
-    } finally {
-      setTrialLoading(false)
-    }
-  }
+
 
   // ── Пополнение рублями (ЮКасса) ─────────────────────────────────
 
@@ -424,34 +393,6 @@ const handleTopupStars = async () => {
           )}
         </div>
 
-        {/* Пробный период — только если нет подписки и не использовал */}
-        {!hasActiveSub && !trialUsed && (
-          <div style={s.trialCard}>
-            <div style={s.trialGlow} />
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-              <span style={{ fontSize: 32 }}>🎁</span>
-              <div>
-                <div style={s.trialTitle}>Пробный период</div>
-                <div style={s.trialDesc}>2 дня бесплатного доступа ко всем функциям</div>
-              </div>
-            </div>
-            <button
-              style={{ ...s.trialBtn, opacity: trialLoading ? 0.6 : 1 }}
-              disabled={trialLoading}
-              onClick={activateTrial}
-            >
-              {trialLoading ? "Активирую..." : "🎁 Получить бесплатно"}
-            </button>
-          </div>
-        )}
-
-        {trialUsed && !hasActiveSub && (
-          <div style={{ ...s.subCard, borderColor: "rgba(245,158,11,0.2)" }}>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>
-              🎁 Пробный период уже использован
-            </div>
-          </div>
-        )}
 
         <button style={s.primaryBtn} onClick={() => setView("plans")}>
           📦 {hasActiveSub ? "Продлить / сменить тариф" : "Купить тариф"}

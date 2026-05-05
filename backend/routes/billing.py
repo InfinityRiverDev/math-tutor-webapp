@@ -1,6 +1,6 @@
 """
 routes/billing.py  —  /billing/*
-Оригинал + Stars + Crypto + Trial (пробный период)
+Оригинал + Stars + Crypto
 """
 
 import os
@@ -28,7 +28,6 @@ router = APIRouter(prefix="/billing")
 logger = logging.getLogger(__name__)
 
 STARS_TO_RUB = float(os.getenv("STARS_TO_RUB", "1.75"))
-trial_usage  = db["trial_usage"]
 
 
 def get_shop_id():      return os.getenv("YOOKASSA_SHOP_ID", "")
@@ -47,7 +46,6 @@ def get_return_url():
 
 # ─────────────────────────────────────────────────────────────────
 # ВСПОМОГАТЕЛЬНАЯ: сохраняем расширенный платёж в MongoDB напрямую
-# (не перезаписываем save_payment из billing_models)
 # ─────────────────────────────────────────────────────────────────
 
 async def _save_payment_extended(
@@ -386,49 +384,6 @@ async def crypto_webhook(request: Request):
             except Exception:
                 pass
     return {"ok": True}
-
-
-# ─────────────────────────────────────────────────────────────────
-# Пробный период
-# ─────────────────────────────────────────────────────────────────
-
-@router.get("/trial/check")
-async def trial_check(user_id: int):
-    doc = await trial_usage.find_one({"user_id": user_id})
-    return {"used": doc is not None}
-
-
-class TrialReq(BaseModel):
-    user_id: int
-
-@router.post("/trial/activate")
-async def trial_activate(req: TrialReq):
-    if await trial_usage.find_one({"user_id": req.user_id}):
-        return {"success": False, "error": "Пробный период уже был использован"}
-
-    existing = await get_active_subscription(req.user_id)
-    if existing:
-        return {"success": False, "error": "У вас уже есть активная подписка"}
-
-    expires = datetime.now() + timedelta(days=2)
-    await subscriptions.update_one(
-        {"user_id": req.user_id},
-        {"$set": {
-            "user_id":      req.user_id,
-            "plan_id":      "trial",
-            "plan_name":    "🎁 Пробный период",
-            "activated_at": datetime.now().isoformat(),
-            "expires_at":   expires.isoformat(),
-            "is_trial":     True,
-        }},
-        upsert=True
-    )
-    await trial_usage.insert_one({
-        "user_id":      req.user_id,
-        "activated_at": datetime.now().isoformat(),
-    })
-    logger.info(f"[TRIAL] activated user={req.user_id}")
-    return {"success": True, "expires_at": expires.isoformat()}
 
 
 # ─────────────────────────────────────────────────────────────────
